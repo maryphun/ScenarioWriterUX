@@ -9,7 +9,11 @@ import {
   validateValues,
   rgba,
 } from "../lib/commands.js";
-import { DEFAULT_PREVIEW_OPTIONS } from "../lib/preview.js";
+import {
+  DEFAULT_PREVIEW_OPTIONS,
+  NON_SPEAKER_FILTER,
+  isNonSpeakingCharacter,
+} from "../lib/preview.js";
 const props = defineProps({
   before: Object,
   after: Object,
@@ -127,6 +131,9 @@ function draw() {
     const r = characterRect(c);
     ctx.save();
     ctx.globalAlpha = (c.opacity ?? 1) * rgba(c.tint)[3];
+    ctx.filter = isNonSpeakingCharacter(c.id, props.row?.speaker)
+      ? NON_SPEAKER_FILTER
+      : "none";
     if (r.img) {
       ctx.translate(r.x + (c.flip ? r.w : 0), r.y);
       ctx.scale(c.flip ? -1 : 1, 1);
@@ -181,6 +188,7 @@ function seek() {
   draw();
 }
 watch(() => [props.after, props.row?.key], seek, { deep: true });
+watch(() => props.row?.speaker, draw);
 watch(() => props.assets, loadImages, { deep: true });
 watch(() => props.options, draw, { deep: true });
 function tween(duration, token, update) {

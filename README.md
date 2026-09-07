@@ -26,7 +26,7 @@ npm run build
 - Pick a spreadsheet tab and node. Click a line to reconstruct its scene.
 - Choose a speaker, type, and press Enter for the next line. Shift+Enter inserts a newline. Japanese IME confirmation is protected.
 - Drop images into the background or sprite section. A background has instant/fade mode, duration, and fade color (black by default).
-- Add any number of character IDs. Each ID has its own image, position, scale, flip, tint, and visibility. Reusing an ID updates that character. Drag a character in the preview or use the position control.
+- Add any number of character IDs. Each ID has its own image, position, scale, flip, tint, and visibility. Reusing an ID updates that character. Drag a character in the preview or use the position control. A named dialogue line automatically keeps the matching character ID in focus and slightly grays the other visible characters; narration leaves everyone at their normal color. Character IDs should therefore exactly match the speaker names in `Master`.
 - Commands can be inserted using forms or dragged from the palette, reordered, edited, and removed. The raw command field preserves unsupported/legacy text.
 - Create choices with a new node name or type an existing node. Preview choices navigate the graph and carry scene state into the destination. Return to the branch point with “分岐元へ”. Directly selecting a scene previews it from a clean state.
 - Previous/next controls are centered under the preview. Play replays the current line's commands; seeking is silent.
