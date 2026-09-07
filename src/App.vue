@@ -111,8 +111,7 @@ const nodeForm = ref({ mode: "scene", target: "new", name: "", text: "" }),
   nodeOrigin = ref(emptyStage());
 const undoStack = ref([]),
   redoStack = ref([]),
-  previewOptions = ref({ ...DEFAULT_PREVIEW_OPTIONS }),
-  theme = ref(localStorage.getItem("scenario-theme") || "dark");
+  previewOptions = ref({ ...DEFAULT_PREVIEW_OPTIONS });
 const tab = computed(
   () =>
     workbook.value.tabs.find((t) => t.id === tabId.value) ||
@@ -275,14 +274,6 @@ watch(
     draftTimer = setTimeout(persist, 450);
   },
   { deep: true },
-);
-watch(
-  theme,
-  (value) => {
-    document.documentElement.dataset.theme = value;
-    localStorage.setItem("scenario-theme", value);
-  },
-  { immediate: true },
 );
 watch(modal, async (value) => {
   modalError.value = "";
@@ -1703,9 +1694,10 @@ onBeforeUnmount(() => {
           ? dirtyTabs.length + " シートに未反映の変更"
           : "未反映の変更なし"
       }}</span
-      ><button @click="theme = theme === 'dark' ? 'light' : 'dark'">
-        {{ theme === "dark" ? "ライト" : "ダーク" }}
-      </button>
+      ><span class="footer-license"
+        >株式会社アノパーク・ピュアプリバッドエンド
+        聖香天使ピュアプリピーチエロ怪人化育成記録　脚本作成ツール</span
+      >
     </footer>
     <div v-if="message" class="toast" role="status">
       {{ message

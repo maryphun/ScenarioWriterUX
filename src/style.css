@@ -20,20 +20,6 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
-:root[data-theme="light"] {
-  color-scheme: light;
-  --bg: #f1f4f8;
-  --surface: #fff;
-  --surface-raised: #f5f7fb;
-  --field: #f8f9fc;
-  --ink: #223044;
-  --muted: #58697e;
-  --line: #d8e0eb;
-  --accent: #365eae;
-  --active: #e8effb;
-  --danger: #a32d38;
-  --shadow: #22304422;
-}
 * {
   box-sizing: border-box;
 }
@@ -374,9 +360,6 @@ fieldset {
   gap: 5px;
   align-items: center;
   overflow-wrap: anywhere;
-}
-:root[data-theme="light"] .line-speaker {
-  color: var(--accent) !important;
 }
 .line-text {
   font-size: 13px;
@@ -922,12 +905,11 @@ fieldset {
   background: var(--surface);
   flex-shrink: 0;
 }
-.statusbar button {
+.footer-license {
   margin-left: auto;
-  background: none;
-  border: 0;
-  padding: 0;
-  font-size: 11px;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 .toast,
 .error-toast {

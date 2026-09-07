@@ -33,6 +33,11 @@ test("Vue editor and existing command forms render with their saved values", asy
     assert.match(html, /フェード時間|フェード色/);
     assert.match(html, /1行目を削除/);
     assert.doesNotMatch(html, /この行の演出を再生/);
+    assert.match(
+      html,
+      /株式会社アノパーク・ピュアプリバッドエンド[\s\S]*聖香天使ピュアプリピーチエロ怪人化育成記録　脚本作成ツール/,
+    );
+    assert.doesNotMatch(html, />ライト</);
     assert.doesNotMatch(html, /Scenario Studio|話者一覧|>Master</);
     const { default: CommandEditor } = await server.ssrLoadModule(
       "/src/components/CommandEditor.vue",
