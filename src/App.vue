@@ -51,6 +51,7 @@ import {
   sceneLines,
   sceneNames,
   sceneEntries,
+  removeScriptRow,
   serialiseTab,
   sampleWorkbook,
   allNodes,
@@ -363,19 +364,27 @@ function onEnter(event) {
     insertLine();
   }
 }
-function deleteLine() {
-  if (!current.value) return;
+function deleteLine(target = current.value) {
+  if (!target?.key) return;
+  const content = (
+    target.choice ||
+    target.text ||
+    target.command ||
+    "内容のない行"
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+  const summary = content.length > 56 ? content.slice(0, 56) + "…" : content;
+  if (!confirm(`このセリフを削除しますか？\n「${summary}」`)) return;
+  const wasSelected = target.key === current.value?.key;
   checkpoint();
-  const at = tab.value.rows.findIndex((r) => r.key === current.value.key),
-    oldIndex = index.value;
-  tab.value.rows.splice(at, 1);
-  selectedKey.value =
-    sceneLines(tab.value, nodeName.value)[Math.max(0, oldIndex - 1)]?.row.key ||
-    "";
-  if (!sceneLines(tab.value, nodeName.value).length) {
-    const row = makeRow(nodeName.value);
-    tab.value.rows.splice(at, 0, row);
-    selectedKey.value = row.key;
+  const selection = removeScriptRow(tab.value, target.key);
+  if (wasSelected && selection) {
+    nodeName.value = selection.scene;
+    selectedKey.value =
+      selection.key || sceneLines(tab.value, selection.scene)[0]?.row.key || "";
+    navigation.value = [];
+    entryState.value = emptyStage();
   }
 }
 function reorderLine(event, target) {
@@ -1110,6 +1119,15 @@ onBeforeUnmount(() => {
                 >
               </div>
             </button>
+            <button
+              class="line-delete"
+              type="button"
+              :aria-label="`${i + 1}行目を削除`"
+              title="このセリフを削除"
+              @click.stop="deleteLine(entry.row)"
+            >
+              <Trash2 :size="14" />
+            </button>
           </div>
         </div>
         <div class="script-bottom">
@@ -1205,7 +1223,7 @@ onBeforeUnmount(() => {
               class="icon-button"
               title="この行を削除"
               aria-label="この行を削除"
-              @click="deleteLine"
+              @click="deleteLine(current)"
             >
               <Trash2 :size="14" />
             </button>

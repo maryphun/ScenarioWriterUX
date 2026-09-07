@@ -11,6 +11,7 @@ import {
   exportYarn,
   choiceGroup,
   pendingChanges,
+  removeScriptRow,
 } from "../src/lib/workbook.js";
 import { parseCommands } from "../src/lib/commands.js";
 
@@ -74,4 +75,26 @@ test("change review counts implicit node assignments explicitly", () => {
   ];
   const tab = importTab({ id: 1, name: "a", rows });
   assert.equal(pendingChanges(tab, { rows }).assignedNodes, 1);
+});
+test("dialogue deletion removes the final row and preserves legacy continuation ownership", () => {
+  const tab = importTab({
+    id: 1,
+    name: "Story",
+    rows: [
+      ["Scene_A", "", "", "first"],
+      ["", "", "", "second"],
+      ["Scene_B", "", "", "third"],
+    ],
+  });
+  const first = sceneLines(tab, "Scene_A")[0].row;
+  const selection = removeScriptRow(tab, first.key);
+  assert.equal(selection.scene, "Scene_A");
+  assert.equal(sceneLines(tab, "Scene_A").length, 1);
+  assert.equal(sceneLines(tab, "Scene_A")[0].row.node, "Scene_A");
+  removeScriptRow(tab, sceneLines(tab, "Scene_A")[0].row.key);
+  assert.equal(sceneLines(tab, "Scene_A").length, 0);
+  assert.deepEqual(
+    sceneLines(tab, "Scene_B").map((entry) => entry.row.text),
+    ["third"],
+  );
 });

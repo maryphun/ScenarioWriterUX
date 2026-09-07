@@ -69,6 +69,37 @@ export function sceneNames(tab) {
 export function sceneLines(tab, node) {
   return sceneEntries(tab).filter((e) => e.scene === node && populated(e.row));
 }
+export function removeScriptRow(tab, key) {
+  const entries = sceneEntries(tab),
+    at = entries.findIndex((entry) => entry.row.key === key);
+  if (at < 0) return null;
+  const scene = entries[at].scene,
+    previousScenes = sceneNames(tab),
+    lineIndex = sceneLines(tab, scene).findIndex(
+      (entry) => entry.row.key === key,
+    ),
+    successor = entries.slice(at + 1).find((entry) => populated(entry.row));
+  if (
+    entries[at].row.node.trim() &&
+    successor?.scene === scene &&
+    !successor.row.node.trim()
+  )
+    successor.row.node = scene;
+  tab.rows.splice(at, 1);
+  const remaining = sceneLines(tab, scene);
+  if (remaining.length)
+    return {
+      scene,
+      key: remaining[Math.min(Math.max(lineIndex, 0), remaining.length - 1)].row
+        .key,
+    };
+  const names = sceneNames(tab),
+    previousIndex = Math.max(0, previousScenes.indexOf(scene));
+  return {
+    scene: names[Math.min(previousIndex, Math.max(0, names.length - 1))] || "",
+    key: "",
+  };
+}
 export function serialiseTab(tab) {
   return sceneEntries(tab).map(({ row, scene }) =>
     KEYS.map((key) =>

@@ -340,6 +340,22 @@ fieldset {
   border: 0;
   background: none;
 }
+.line-delete {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  flex: 0 0 32px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  opacity: 0.65;
+}
+.line-delete:hover,
+.line-delete:focus-visible {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  opacity: 1;
+}
 .line-number {
   font-size: 11px;
   color: var(--muted);

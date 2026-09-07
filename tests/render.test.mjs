@@ -31,6 +31,8 @@ test("Vue editor and existing command forms render with their saved values", asy
     const html = await renderToString(createSSRApp(App));
     assert.match(html, /プレビュー/);
     assert.match(html, /フェード時間|フェード色/);
+    assert.match(html, /1行目を削除/);
+    assert.doesNotMatch(html, /この行の演出を再生/);
     assert.doesNotMatch(html, /Scenario Studio|話者一覧|>Master</);
     const { default: CommandEditor } = await server.ssrLoadModule(
       "/src/components/CommandEditor.vue",
