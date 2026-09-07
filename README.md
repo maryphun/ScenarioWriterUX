@@ -32,6 +32,7 @@ npm run build
 - Previous/next controls are centered under the preview. Play replays the current line's commands; seeking is silent.
 - Browser drafts and media use IndexedDB. Use “シートに反映” to review and save changed tabs. The backend checks revisions and retains backups. Existing `Master` entries supply speaker names/colors, without displaying that technical label in the editor.
 - Share each asset through its settings to store it in the API's private Drive folder. Other sessions load those assets on connection or using “共有素材を読み込む”. Local-only assets are labeled accordingly. Uploads are limited to 10 MB per file; there is no fixed character count limit.
+- Use the trash icon on an asset row to remove it. Local assets are deleted from browser storage. Shared assets are removed from the shared index and moved to Google Drive Trash, where they remain recoverable. The editor warns when commands still reference the asset.
 
 ## Compatibility and boundaries
 

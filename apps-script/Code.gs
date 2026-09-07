@@ -42,7 +42,7 @@ function initializeEditor() {
 }
 
 function doGet() {
-  return json_({ ok: true, service: "ScenarioWriterUX", version: 2 });
+  return json_({ ok: true, service: "ScenarioWriterUX", version: 3 });
 }
 function doPost(e) {
   try {
@@ -72,6 +72,9 @@ function doPost(e) {
       case "uploadAsset":
         data = locked_(() => uploadAsset_(body.asset));
         break;
+      case "deleteAsset":
+        data = locked_(() => deleteAsset_(body.assetId));
+        break;
       default:
         fail_("BAD_REQUEST", "未対応の操作です。");
     }
@@ -80,7 +83,10 @@ function doPost(e) {
     const diagnosticId = Utilities.getUuid().split("-")[0];
     if (!error.apiCode)
       console.error(
-        "[" + diagnosticId + "] " + (error && error.stack ? error.stack : error),
+        "[" +
+          diagnosticId +
+          "] " +
+          (error && error.stack ? error.stack : error),
       );
     return json_({
       ok: false,
@@ -454,4 +460,16 @@ function getAsset_(fileId) {
   if (file.getSize() > MAX_ASSET_BYTES)
     fail_("TOO_LARGE", "素材が大きすぎます。");
   return { base64: Utilities.base64Encode(file.getBlob().getBytes()) };
+}
+function deleteAsset_(assetId) {
+  if (typeof assetId !== "string" || !/^[a-f0-9]{32}$/.test(assetId))
+    fail_("BAD_ASSET", "素材 ID が正しくありません。");
+  const index = assetIndex_(),
+    asset = index[assetId];
+  if (!asset) fail_("NOT_FOUND", "共有素材が見つかりません。");
+  // Drive Trash is recoverable and avoids exposing a permanent-delete action.
+  DriveApp.getFileById(asset.fileId).setTrashed(true);
+  delete index[assetId];
+  saveAssetIndex_(index);
+  return { id: assetId };
 }

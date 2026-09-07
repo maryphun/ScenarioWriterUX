@@ -69,6 +69,7 @@ import {
   loadDraft,
   readAssets,
   putAsset,
+  removeAsset as removeStoredAsset,
   download,
 } from "./lib/storage.js";
 import { request, DEFAULT_API_URL } from "./lib/api.js";
@@ -826,6 +827,59 @@ async function loadSharedAssets() {
     }
   } catch (e) {
     notify("シートは接続済みです。共有素材：" + e.message);
+  }
+}
+function assetUsageCount(asset) {
+  const name = asset.name.toLowerCase();
+  return workbook.value.tabs.reduce(
+    (count, itemTab) =>
+      count +
+      itemTab.rows.filter((row) =>
+        parseCommands(row.command).some(
+          (command) =>
+            String(command.values?.asset || "").toLowerCase() === name,
+        ),
+      ).length,
+    0,
+  );
+}
+async function discardAsset(asset) {
+  const usage = assetUsageCount(asset);
+  const usageWarning = usage
+    ? `\n\nこの素材は ${usage} 行の演出で使用中です。削除後は画像・音声が未登録として表示されます。`
+    : "";
+  const scopeMessage = asset.sharedId
+    ? "共有素材から削除し、Google Drive のゴミ箱へ移動します。"
+    : "このブラウザーの素材ライブラリーから削除します。";
+  if (
+    !confirm(
+      `素材「${asset.name}」を削除しますか？\n${scopeMessage}${usageWarning}`,
+    )
+  )
+    return;
+  busy.value = true;
+  error.value = "";
+  try {
+    if (asset.sharedId)
+      await request(endpoint.value, accessKey.value, "deleteAsset", {
+        assetId: asset.id,
+      });
+    await removeStoredAsset(asset.id);
+    if (asset.url) URL.revokeObjectURL(asset.url);
+    assets.value = assets.value.filter((item) => item.id !== asset.id);
+    if (backgroundForm.value.asset === asset.name)
+      backgroundForm.value.asset = "";
+    if (characterForm.value.asset === asset.name)
+      characterForm.value.asset = "";
+    notify(
+      asset.sharedId
+        ? "共有素材を Google Drive のゴミ箱へ移動しました。"
+        : "素材を削除しました。",
+    );
+  } catch (e) {
+    error.value = "素材を削除できませんでした：" + e.message;
+  } finally {
+    busy.value = false;
   }
 }
 function exportBackup() {
@@ -1620,6 +1674,16 @@ onBeforeUnmount(() => {
                     >{{ a.description || "説明を追加" }}
                     {{ a.sharedId ? "· 共有済み" : "" }}</small
                   >
+                </button>
+                <button
+                  class="asset-delete"
+                  type="button"
+                  :disabled="busy"
+                  :aria-label="a.name + 'を削除'"
+                  :title="a.sharedId ? '共有素材を削除' : '素材を削除'"
+                  @click.stop="discardAsset(a)"
+                >
+                  <Trash2 :size="15" />
                 </button>
               </article>
               <p v-if="!assets.length" class="meta">

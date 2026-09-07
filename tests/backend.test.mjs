@@ -93,6 +93,7 @@ test("all data actions require the key before reading a workbook or Drive", () =
     "getAsset",
     "listAssets",
     "uploadAsset",
+    "deleteAsset",
   ]) {
     const result = c.doPost({
       postData: { contents: JSON.stringify({ action, key: "wrong" }) },
@@ -101,7 +102,7 @@ test("all data actions require the key before reading a workbook or Drive", () =
     assert.equal(result.error.code, "UNAUTHORIZED");
   }
   assert.equal(c.doGet().ok, true);
-  assert.equal(c.doGet().version, 2);
+  assert.equal(c.doGet().version, 3);
 });
 test("revision serialization ignores object property insertion order", () => {
   const { context: c } = backend();
@@ -194,5 +195,31 @@ test("script locks release on errors, and arbitrary Drive files cannot be reques
   assert.throws(
     () => c.getAsset_("unrelated-file"),
     (e) => e.apiCode === "NOT_FOUND",
+  );
+});
+test("shared asset deletion removes its index entry and trashes only its indexed Drive file", () => {
+  const { context: c } = backend();
+  const id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const index = {
+    [id]: { id, fileId: "indexed-drive-file", name: "BG_Test" },
+  };
+  let trashed = "",
+    saved;
+  c.assetIndex_ = () => index;
+  c.saveAssetIndex_ = (next) => {
+    saved = plain(next);
+  };
+  c.DriveApp.getFileById = (fileId) => ({
+    setTrashed(value) {
+      assert.equal(value, true);
+      trashed = fileId;
+    },
+  });
+  assert.deepEqual(plain(c.deleteAsset_(id)), { id });
+  assert.equal(trashed, "indexed-drive-file");
+  assert.deepEqual(saved, {});
+  assert.throws(
+    () => c.deleteAsset_("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+    (error) => error.apiCode === "NOT_FOUND",
   );
 });

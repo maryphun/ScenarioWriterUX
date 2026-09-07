@@ -22,6 +22,7 @@ When updating the backend, use **Deploy → Manage deployments → Edit → New 
 - Existing cell formats, validation and notes follow source rows. Column I onward and the header row are outside the write range. Formulas in script columns cause a refusal to save, rather than being converted to text.
 - All new cell values are explicit strings, so text starting with `=` remains text.
 - Assets are private Drive files returned only through authenticated API requests. Anyone with the editor key can read/write this workbook and its asset library. Rotate `EDITOR_ACCESS_KEY` in Script properties if team access changes.
+- Deleting a shared asset removes it from the shared index and moves its Drive file to Trash. Restoring the file from Drive Trash does not automatically add it back to the shared index.
 - Backups are in `ScenarioWriterUX Backups`. They contain the prior eight-column values and formatting. No backup is automatically deleted.
 - HTTP ContentService cannot set custom response status codes; callers must inspect the `{ok,data,error}` JSON envelope.
 
