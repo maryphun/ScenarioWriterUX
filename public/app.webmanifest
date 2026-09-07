@@ -1,0 +1,19 @@
+{
+  "name": "シナリオ編集",
+  "short_name": "シナリオ編集",
+  "description": "脚本を編集し、背景や立ち絵をプレビューするシナリオエディター。",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#141923",
+  "theme_color": "#1e2531",
+  "icons": [
+    {
+      "src": "./app-icon.png",
+      "sizes": "433x433",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
