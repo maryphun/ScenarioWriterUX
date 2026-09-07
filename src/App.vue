@@ -43,6 +43,10 @@ import {
   COLOR_NAMES,
 } from "./lib/commands.js";
 import {
+  DEFAULT_CHARACTER_TRANSITION,
+  transitionDuration,
+} from "./lib/transitions.js";
+import {
   SHEET_ID,
   KEYS,
   uid,
@@ -180,9 +184,10 @@ const characterForm = ref({
   id: "momoka",
   asset: "",
   x: 0.5,
-  duration: "instant",
+  ...DEFAULT_CHARACTER_TRANSITION,
   flip: "false",
 });
+const hideCharacterForm = ref({ ...DEFAULT_CHARACTER_TRANSITION });
 const connected = computed(() => !workbook.value.demo);
 let draftTimer,
   noticeTimer,
@@ -464,9 +469,28 @@ function applyBackground() {
 }
 function addCharacter() {
   try {
-    setCommand(buildCommand("char:show", characterForm.value));
+    setCommand(
+      buildCommand("char:show", {
+        ...characterForm.value,
+        duration: transitionDuration(characterForm.value),
+      }),
+    );
     selectedCharacter.value = characterForm.value.id;
     notify("立ち絵を追加しました。");
+  } catch (e) {
+    error.value = e.message;
+  }
+}
+function hideCharacter() {
+  if (!character.value) return;
+  try {
+    setCommand(
+      buildCommand("char:hide", {
+        id: character.value.id,
+        duration: transitionDuration(hideCharacterForm.value),
+      }),
+    );
+    notify("この行から立ち絵を非表示にしました。");
   } catch (e) {
     error.value = e.message;
   }
@@ -697,7 +721,13 @@ function useAsset(asset) {
     characterForm.value.asset = asset.name;
     characterForm.value.id =
       asset.characterId || "character_" + (after.value.characters.length + 1);
-    openCommand("char:show", buildCommand("char:show", characterForm.value));
+    openCommand(
+      "char:show",
+      buildCommand("char:show", {
+        ...characterForm.value,
+        duration: transitionDuration(characterForm.value),
+      }),
+    );
   } else
     openCommand(
       asset.kind === "bgm" ? "bgm:play" : "se:play",
@@ -1541,11 +1571,34 @@ onBeforeUnmount(() => {
                   色
                 </button>
               </div>
+              <fieldset class="transition-fields character-transition">
+                <legend>非表示の切り替え</legend>
+                <div class="segmented">
+                  <button
+                    type="button"
+                    :class="{ active: hideCharacterForm.mode === 'instant' }"
+                    @click="hideCharacterForm.mode = 'instant'"
+                  >
+                    即時</button
+                  ><button
+                    type="button"
+                    :class="{ active: hideCharacterForm.mode === 'fade' }"
+                    @click="hideCharacterForm.mode = 'fade'"
+                  >
+                    フェード
+                  </button>
+                </div>
+              </fieldset>
+              <label v-if="hideCharacterForm.mode === 'fade'"
+                >フェード時間（秒）<input
+                  v-model.number="hideCharacterForm.time"
+                  type="number"
+                  min="0"
+                  step="0.1" /></label
+              >
               <button
                 class="text-button danger"
-                @click="
-                  setCommand(buildCommand('char:hide', { id: character.id }))
-                "
+                @click="hideCharacter"
               >
                 この行から非表示
               </button>
@@ -1586,6 +1639,30 @@ onBeforeUnmount(() => {
                   max="1"
                   step=".05"
                 /></div></label
+            ><fieldset class="transition-fields character-transition">
+              <legend>表示の切り替え</legend>
+              <div class="segmented">
+                <button
+                  type="button"
+                  :class="{ active: characterForm.mode === 'instant' }"
+                  @click="characterForm.mode = 'instant'"
+                >
+                  即時</button
+                ><button
+                  type="button"
+                  :class="{ active: characterForm.mode === 'fade' }"
+                  @click="characterForm.mode = 'fade'"
+                >
+                  フェード
+                </button>
+              </div>
+            </fieldset>
+            <label v-if="characterForm.mode === 'fade'"
+              >フェード時間（秒）<input
+                v-model.number="characterForm.time"
+                type="number"
+                min="0"
+                step="0.1" /></label
             ><button
               class="button primary full"
               :disabled="!current || !characterForm.asset"

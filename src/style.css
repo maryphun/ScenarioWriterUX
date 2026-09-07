@@ -712,6 +712,12 @@ fieldset {
   color: var(--muted);
   margin-bottom: 9px;
 }
+.transition-fields.character-transition {
+  margin: 16px 0 10px;
+}
+.character-transition + label {
+  margin-top: 0;
+}
 .segmented {
   display: flex;
   padding: 3px;
