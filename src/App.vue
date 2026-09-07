@@ -11,8 +11,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Plus,
-  Play,
-  Square,
   Settings2,
   ImagePlus,
   Users,
@@ -85,8 +83,7 @@ const baseline = ref({}),
   message = ref(""),
   error = ref(""),
   busy = ref(false),
-  draftStatus = ref("読み込み中…"),
-  playing = ref(false);
+  draftStatus = ref("読み込み中…");
 const endpoint = ref(
     localStorage.getItem("scenario-api-url") ||
       import.meta.env.VITE_APPS_SCRIPT_URL ||
@@ -94,7 +91,6 @@ const endpoint = ref(
   ),
   accessKey = ref(sessionStorage.getItem("scenario-api-key") || "");
 const panel = ref("background"),
-  stageRef = ref(),
   dialog = ref(),
   modal = ref(""),
   modalError = ref(""),
@@ -1136,7 +1132,6 @@ onBeforeUnmount(() => {
         </div>
         <StagePreview
           v-if="current"
-          ref="stageRef"
           :before="before"
           :after="after"
           :row="current"
@@ -1151,7 +1146,6 @@ onBeforeUnmount(() => {
             panel = 'characters';
           "
           @message="notify"
-          @playing="playing = $event"
         />
         <div v-else class="empty-preview">
           <Clapperboard :size="32" />
@@ -1167,17 +1161,6 @@ onBeforeUnmount(() => {
             :disabled="index === 0 || !current"
           >
             <ArrowLeft :size="16" />前へ</button
-          ><button
-            class="play-button"
-            :aria-label="playing ? '再生停止' : 'この行の演出を再生'"
-            :title="playing ? '再生停止' : 'この行の演出を再生'"
-            :disabled="!current"
-            @click="playing ? stageRef.stop() : stageRef.play()"
-          >
-            <Square v-if="playing" :size="16" /><Play
-              v-else
-              :size="17"
-            /></button
           ><button
             class="button"
             @click="step(1)"

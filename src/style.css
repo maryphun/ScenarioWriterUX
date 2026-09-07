@@ -493,20 +493,6 @@ fieldset {
   min-width: 87px;
   background: transparent;
 }
-.play-button {
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  height: 38px;
-  width: 38px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface);
-  color: var(--ink);
-}
-.play-button:hover:not(:disabled) {
-  background: var(--active);
-}
 .dialogue-editor {
   border: 1px solid var(--line);
   border-top: 2px solid var(--line-color);
