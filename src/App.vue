@@ -72,6 +72,7 @@ import {
   download,
 } from "./lib/storage.js";
 import { request, DEFAULT_API_URL } from "./lib/api.js";
+import { DEFAULT_PREVIEW_OPTIONS } from "./lib/preview.js";
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const workbook = ref(sampleWorkbook()),
@@ -110,7 +111,7 @@ const nodeForm = ref({ mode: "scene", target: "new", name: "", text: "" }),
   nodeOrigin = ref(emptyStage());
 const undoStack = ref([]),
   redoStack = ref([]),
-  previewOptions = ref({ characterHeight: 0.9, bottomOffset: 0 }),
+  previewOptions = ref({ ...DEFAULT_PREVIEW_OPTIONS }),
   theme = ref(localStorage.getItem("scenario-theme") || "dark");
 const tab = computed(
   () =>

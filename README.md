@@ -38,7 +38,7 @@ npm run build
 
 - The eight existing columns are preserved. Empty node cells are interpreted as continuation in the editor, then filled for meaningful rows when a changed tab is saved, matching the Unity converter's requirement. Blank separator rows remain. The review shows how many node names will be filled.
 - Imported leading `*` node names are not silently renamed. Legacy destinations can be previewed when unambiguous; invalid/missing/exact-name mismatches must be resolved before Yarn export.
-- The renderer implements the provided command families and aliases. It uses the Unity controller defaults of a 0.9 stage-height sprite and bottom pivot. Height and bottom offset are adjustable. Missing images remain labeled placeholders.
+- The renderer implements the provided command families and aliases. Its default preview uses a 1.1 stage-height sprite and a -175 px bottom offset at 1080p; both values remain adjustable. Missing images remain labeled placeholders.
 - The preview approximates the Unity canvas and UI; it does not execute arbitrary Yarn instructions, gameplay code, battle transitions or other custom commands. Unsupported commands are retained and identified. Backgrounds stretch to the stage like the current Unity background controller. Native text layout/fonts and engine rendering can still differ.
 - Browser audio needs user interaction and a supported uploaded audio format. Merely selecting a line does not play sound.
 - JSON backup includes scenario text, not binary assets. Restoring a backup opens a local draft instead of silently overwriting a remote workbook.

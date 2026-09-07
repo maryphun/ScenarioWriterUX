@@ -9,6 +9,7 @@ import {
   validateValues,
   rgba,
 } from "../lib/commands.js";
+import { DEFAULT_PREVIEW_OPTIONS } from "../lib/preview.js";
 const props = defineProps({
   before: Object,
   after: Object,
@@ -79,12 +80,19 @@ function tinted(image, color) {
 }
 function characterRect(c) {
   const img = images.get(findAsset(c.asset)?.id),
-    h = 1080 * (props.options?.characterHeight ?? 0.9) * c.scale,
+    h =
+      1080 *
+      (props.options?.characterHeight ??
+        DEFAULT_PREVIEW_OPTIONS.characterHeight) *
+      c.scale,
     w = img ? (img.width / img.height) * h : h * 0.45;
   const x = w <= 1920 ? w / 2 + (1920 - w) * c.x : 1920 * c.x;
   return {
     x: x - w / 2,
-    y: 1080 - h - (props.options?.bottomOffset ?? 0),
+    y:
+      1080 -
+      h -
+      (props.options?.bottomOffset ?? DEFAULT_PREVIEW_OPTIONS.bottomOffset),
     w,
     h,
     img,
