@@ -42,7 +42,7 @@ function initializeEditor() {
 }
 
 function doGet() {
-  return json_({ ok: true, service: "ScenarioWriterUX", version: 1 });
+  return json_({ ok: true, service: "ScenarioWriterUX", version: 2 });
 }
 function doPost(e) {
   try {
@@ -77,13 +77,19 @@ function doPost(e) {
     }
     return json_({ ok: true, data: data });
   } catch (error) {
+    const diagnosticId = Utilities.getUuid().split("-")[0];
+    if (!error.apiCode)
+      console.error(
+        "[" + diagnosticId + "] " + (error && error.stack ? error.stack : error),
+      );
     return json_({
       ok: false,
       error: {
         code: error.apiCode || "SERVER_ERROR",
         message: error.apiCode
           ? error.message
-          : "処理できませんでした。Apps Script の実行履歴を確認してください。",
+          : "処理できませんでした。Apps Script の実行履歴を確認してください。診断 ID: " +
+            diagnosticId,
       },
     });
   }
@@ -106,6 +112,20 @@ function digest_(value) {
   )
     .map((b) => ("0" + (b & 255).toString(16)).slice(-2))
     .join("");
+}
+// The Sheets API does not guarantee JSON object property order. Canonicalizing
+// keys prevents an unchanged sheet from producing a different revision hash.
+function stableStringify_(value) {
+  return JSON.stringify(value, function (_, current) {
+    if (!current || typeof current !== "object" || Array.isArray(current))
+      return current;
+    return Object.keys(current)
+      .sort()
+      .reduce(function (sorted, key) {
+        sorted[key] = current[key];
+        return sorted;
+      }, {});
+  });
 }
 function authenticate_(key) {
   const expected =
@@ -180,7 +200,7 @@ function snapshot_(book, sheet) {
     name: sheet.getName(),
     rows: rows,
     cells: cells,
-    revision: digest_(JSON.stringify({ rows: rows, cells: cells })),
+    revision: digest_(stableStringify_({ rows: rows, cells: cells })),
   };
 }
 function publicTab_(snapshot) {
@@ -202,6 +222,17 @@ function readWorkbook_() {
       .filter(isScriptSheet_)
       .map((sheet) => publicTab_(snapshot_(book, sheet))),
   };
+}
+
+/** Run from the Apps Script function dropdown to verify workbook access. */
+function testConnection() {
+  const result = readWorkbook_();
+  console.log(
+    "Connection OK. Script tabs: " +
+      result.tabs.length +
+      ", speakers: " +
+      result.speakers.length,
+  );
 }
 function validateRows_(rows, sourceRows, previousCount) {
   if (

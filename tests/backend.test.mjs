@@ -24,6 +24,7 @@ function backend() {
     Utilities: {
       DigestAlgorithm: { SHA_256: "sha256" },
       Charset: { UTF_8: "utf8" },
+      getUuid: () => "diagnostic-id-0000",
       computeDigest: (_, value) => [
         ...createHash("sha256").update(value).digest(),
       ],
@@ -100,6 +101,23 @@ test("all data actions require the key before reading a workbook or Drive", () =
     assert.equal(result.error.code, "UNAUTHORIZED");
   }
   assert.equal(c.doGet().ok, true);
+  assert.equal(c.doGet().version, 2);
+});
+test("revision serialization ignores object property insertion order", () => {
+  const { context: c } = backend();
+  const first = {
+    rows: [["Scene"]],
+    cells: [{ values: [{ userEnteredFormat: { bold: true, fontSize: 12 } }] }],
+  };
+  const second = {
+    cells: [{ values: [{ userEnteredFormat: { fontSize: 12, bold: true } }] }],
+    rows: [["Scene"]],
+  };
+  assert.equal(c.stableStringify_(first), c.stableStringify_(second));
+  assert.equal(
+    c.digest_(c.stableStringify_(first)),
+    c.digest_(c.stableStringify_(second)),
+  );
 });
 test("stale revisions and non-script tabs never create backups or write cells", () => {
   const { context: c, body, backups, batches } = writableBackend();

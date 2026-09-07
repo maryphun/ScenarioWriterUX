@@ -8,6 +8,8 @@
 6. Choose **Deploy → New deployment → Web app**. Execute as **Me**. Set access to **Anyone**. The API itself requires the generated access key for every data read and write; the spreadsheet and media files stay private.
 7. Deploy and copy the URL ending in **/exec**. Give Codex this URL, or paste it into the app's connection settings together with the access key.
 
+`testConnection` is available in the function dropdown. Run it to verify that the deployed account can read the workbook and that the Advanced Sheets service is enabled. It logs only tab and speaker counts.
+
 When updating the backend, use **Deploy → Manage deployments → Edit → New version**. Keep the same deployment URL.
 
 ## API behavior
@@ -16,6 +18,7 @@ When updating the backend, use **Deploy → Manage deployments → Edit → New 
 - The API is pinned to `SPREADSHEET_ID`, initially `1nyJ6dGCOI1a9f9Nujc7XhxoHXj7qh1cmeDPvAFdLLx4`. It does not accept an arbitrary spreadsheet ID from callers.
 - Only visible script tabs with the exact eight known column headers can be written. `Master` is read only.
 - Save requests compare a content-and-format revision, acquire a script lock, retain a private JSON backup, and submit a single Sheets batch for that tab. A stale revision is rejected. Human edits made directly in Sheets are not locked by Apps Script; avoid editing the same tab directly during a save.
+- Revision payloads are canonicalized before hashing because the Sheets API does not guarantee JSON object property order. This prevents unchanged cell formatting from causing false conflict errors.
 - Existing cell formats, validation and notes follow source rows. Column I onward and the header row are outside the write range. Formulas in script columns cause a refusal to save, rather than being converted to text.
 - All new cell values are explicit strings, so text starting with `=` remains text.
 - Assets are private Drive files returned only through authenticated API requests. Anyone with the editor key can read/write this workbook and its asset library. Rotate `EDITOR_ACCESS_KEY` in Script properties if team access changes.
