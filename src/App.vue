@@ -194,8 +194,25 @@ const assetUrl = (name) =>
 const character = computed(() =>
   after.value.characters.find((c) => c.id === selectedCharacter.value),
 );
+const masterCharacterIds = computed(() =>
+  [
+    ...new Set(
+      workbook.value.speakers
+        .map((speaker) => String(speaker.name || "").trim())
+        .filter(Boolean),
+    ),
+  ],
+);
+const characterIdOptions = computed(() =>
+  [
+    ...new Set([
+      ...masterCharacterIds.value,
+      ...after.value.characters.map((item) => item.id).filter(Boolean),
+    ]),
+  ],
+);
 const characterForm = ref({
-  id: "momoka",
+  id: "",
   asset: "",
   x: 0.5,
   ...DEFAULT_CHARACTER_TRANSITION,
@@ -507,14 +524,18 @@ function applyBackground() {
   }
 }
 function addCharacter() {
+  const characterId = characterForm.value.id.trim();
+  if (!characterId) return;
   try {
     setCommand(
       buildCommand("char:show", {
         ...characterForm.value,
+        id: characterId,
         duration: transitionDuration(characterForm.value),
       }),
     );
-    selectedCharacter.value = characterForm.value.id;
+    characterForm.value.id = characterId;
+    selectedCharacter.value = characterId;
     notify("立ち絵を追加しました。");
   } catch (e) {
     error.value = e.message;
@@ -1734,7 +1755,15 @@ onBeforeUnmount(() => {
             ><label
               >キャラクター ID<input
                 v-model="characterForm.id"
-                placeholder="momoka" /></label
+                list="master-character-ids"
+                placeholder="名前を入力 / 選択"
+                autocomplete="off" /><datalist id="master-character-ids">
+                <option
+                  v-for="name in masterCharacterIds"
+                  :key="name"
+                  :value="name"
+                />
+              </datalist></label
             ><label
               >立ち絵<select v-model="characterForm.asset">
                 <option value="">画像を選択</option>
@@ -1793,7 +1822,9 @@ onBeforeUnmount(() => {
                 step="0.1" /></label
             ><button
               class="button primary full"
-              :disabled="!current || !characterForm.asset"
+              :disabled="
+                !current || !characterForm.id.trim() || !characterForm.asset
+              "
               @click="addCharacter"
             >
               <Plus :size="15" />この行に追加</button
@@ -1956,7 +1987,7 @@ onBeforeUnmount(() => {
         :initial="commandInitial"
         :preset="commandPreset"
         :assets="assets"
-        :character-ids="after.characters.map((c) => c.id)"
+        :character-ids="characterIdOptions"
         @save="saveCommand"
         @cancel="modal = ''"
       />

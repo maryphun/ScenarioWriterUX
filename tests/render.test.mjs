@@ -48,6 +48,14 @@ test("Vue editor and existing command forms render with their saved values", asy
     assert.match(form, /value="saved_id"/);
     assert.match(form, /value="0.73"/);
     assert.match(form, /value="1.4"/);
+    const suggestedForm = await renderToString(
+      createSSRApp(CommandEditor, {
+        preset: "char:show",
+        characterIds: ["白崎桃香", "宮森楓"],
+      }),
+    );
+    assert.match(suggestedForm, /value="白崎桃香"/);
+    assert.match(suggestedForm, /value="宮森楓"/);
   } finally {
     await server.close();
   }

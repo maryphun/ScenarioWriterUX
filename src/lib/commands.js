@@ -8,7 +8,7 @@ const field = (key, label, type = "text", value = "", extra = {}) => ({
 const asset = (label, kind) =>
   field("asset", label, "asset", "", { required: true, kind });
 const id = () =>
-  field("id", "キャラクター ID", "text", "momoka", { required: true });
+  field("id", "キャラクター ID", "text", "", { required: true });
 const duration = (value = "instant") =>
   field("duration", "時間", "duration", value);
 const color = (value = "black") => field("color", "色", "color", value);

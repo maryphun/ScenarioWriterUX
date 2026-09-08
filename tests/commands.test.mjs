@@ -15,7 +15,11 @@ test("all supplied command families round-trip, including aliases and optional d
     const values = Object.fromEntries(
       spec.fields.map((f) => [
         f.key,
-        f.type === "asset" ? "Asset_Name" : f.default,
+        f.type === "asset"
+          ? "Asset_Name"
+          : f.key === "id"
+            ? "test_actor"
+            : f.default,
       ]),
     );
     for (const key of [spec.key, ...spec.aliases]) {
@@ -29,6 +33,13 @@ test("all supplied command families round-trip, including aliases and optional d
         ),
       );
     }
+  }
+});
+test("character command IDs start blank", () => {
+  for (const spec of COMMANDS.filter((item) =>
+    item.fields.some((field) => field.key === "id"),
+  )) {
+    assert.equal(spec.fields.find((field) => field.key === "id").default, "");
   }
 });
 test("multiple bracket commands preserve their order and unknown/incomplete commands", () => {
