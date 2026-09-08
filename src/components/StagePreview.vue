@@ -12,6 +12,8 @@ import {
 import {
   DEFAULT_PREVIEW_OPTIONS,
   NON_SPEAKER_FILTER,
+  characterCenterX,
+  characterPositionFromCenter,
   isNonSpeakingCharacter,
 } from "../lib/preview.js";
 const props = defineProps({
@@ -105,7 +107,7 @@ function characterRect(c) {
         DEFAULT_PREVIEW_OPTIONS.characterHeight) *
       c.scale,
     w = img ? (img.width / img.height) * h : h * 0.45;
-  const x = w <= 1920 ? w / 2 + (1920 - w) * c.x : 1920 * c.x;
+  const x = characterCenterX(c.x, w);
   return {
     x: x - w / 2,
     y:
@@ -436,10 +438,7 @@ function pointerMove(event) {
     r = canvas.value.getBoundingClientRect(),
     w = characterRect(c).w,
     x = ((event.clientX - r.left) * 1920) / r.width;
-  c.x = Math.max(
-    0,
-    Math.min(1, w < 1920 ? (x - w / 2) / (1920 - w) : x / 1920),
-  );
+  c.x = characterPositionFromCenter(x, w);
   draw();
 }
 function pointerUp() {

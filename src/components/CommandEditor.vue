@@ -150,7 +150,9 @@ const optionsFor = (f) => props.assets.filter((a) => a.kind === f.kind);
             required
           />
         </div>
-        <small v-if="f.key === 'x'">0：左 / 0.5：中央 / 1：右</small></label
+        <small v-if="f.key === 'x'"
+          >0：左端より250px外 / 0.5：中央 / 1：右端より250px外</small
+        ></label
       >
       <label v-else
         >{{ f.label
