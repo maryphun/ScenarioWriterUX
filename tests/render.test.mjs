@@ -39,6 +39,9 @@ test("Vue editor and existing command forms render with their saved values", asy
     );
     assert.doesNotMatch(html, />ライト</);
     assert.doesNotMatch(html, /Scenario Studio|話者一覧|>Master</);
+    assert.match(html, /スプレッドシートに接続してください/);
+    assert.match(html, /class="disconnected connection-state"/);
+    assert.doesNotMatch(html, /接続前・サンプル/);
     const { default: CommandEditor } = await server.ssrLoadModule(
       "/src/components/CommandEditor.vue",
     );

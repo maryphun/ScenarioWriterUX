@@ -1080,11 +1080,17 @@ onBeforeUnmount(() => {
           </option>
         </select>
       </div>
-      <div class="top-actions">
-        <span class="connection-state" :class="{ connected }">{{
-          connected ? "接続済み" : "接続前・サンプル"
+      <span
+        class="connection-state"
+        :class="{ connected, disconnected: !connected }"
+        role="status"
+        aria-live="polite"
+        >{{
+          connected ? "接続済み" : "スプレッドシートに接続してください"
         }}</span
-        ><button
+      >
+      <div class="top-actions">
+        <button
           class="icon-button"
           title="元に戻す"
           aria-label="元に戻す"
