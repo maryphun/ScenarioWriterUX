@@ -664,6 +664,7 @@ async function sync() {
         tabId: t.id,
         revision: t.revision,
         baseRows: baseline.value[t.id]?.rows || [],
+        rawRows: t.rows.map((r) => KEYS.map((key) => String(r[key] || ""))),
         rows: serialiseTab(t),
         sourceRows: t.rows.map((r) => r.sourceRow),
       });
@@ -1486,7 +1487,7 @@ onBeforeUnmount(() => {
           <FileText :size="22" />
           <h2>制作指示の行</h2>
           <p>
-            この行は制作メモ専用です。背景・立ち絵・演出コマンドは設定されません。
+            この行は制作メモ専用です。背景・立ち絵・演出コマンドは設定できません。
           </p>
         </div>
         <div v-else class="inspector-body">
@@ -1977,11 +1978,7 @@ onBeforeUnmount(() => {
       />
       <form v-if="modal === 'connect'" @submit.prevent="connect">
         <p class="muted">
-          Apps Script の Web
-          アプリと接続すると、脚本の読み込み・保存と素材の共有ができます。
-        </p>
-        <p class="muted">
-          同時編集の取り違えを防ぐため、ページを開くたびに最新のスプレッドシートを再読込してください。
+          同時編集の取り違えを防ぐため、接続後スプレッドシートをロックすることを推奨します。
         </p>
         <label
           >Web アプリ URL<input
@@ -2051,7 +2048,7 @@ onBeforeUnmount(() => {
       <div v-if="modal === 'sync'">
         <p>次のシートの A〜H 列を更新します。</p>
         <p class="muted">
-          他の担当者が別のセルを変更していた場合は、その変更を残して編集部分だけを反映します。同じセルや行構成が変更されている場合は保存を停止します。
+          他の担当者による別セルの変更や行の追加・削除を残し、照合できた行へ編集部分だけを反映します。同じセル、または削除された行をこの画面でも変更している場合は保存を停止します。
         </p>
         <div v-for="t in dirtyTabs" :key="t.id" class="sync-item">
           <strong>{{ t.name }}</strong

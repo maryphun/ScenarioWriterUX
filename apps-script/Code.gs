@@ -42,7 +42,7 @@ function initializeEditor() {
 }
 
 function doGet() {
-  return json_({ ok: true, service: "ScenarioWriterUX", version: 5 });
+  return json_({ ok: true, service: "ScenarioWriterUX", version: 6 });
 }
 function doPost(e) {
   try {
@@ -309,45 +309,108 @@ function hasDirectSourceOrder_(sourceRows, count) {
     })
   );
 }
-function mergeConcurrentRows_(baseRows, localRows, remoteRows) {
-  if (
-    baseRows.length !== localRows.length ||
-    baseRows.length !== remoteRows.length
-  )
+function mergeConcurrentRows_(baseRows, localRows, remoteRows, localIntentRows) {
+  if (baseRows.length !== localRows.length)
     fail_(
       "CONFLICT",
-      "同時編集中に行の追加・削除・並べ替えがあり、自動統合できませんでした。",
+      "この画面でも行の追加・削除・並べ替えがあります。再同期してから行構成を編集してください。",
     );
-  for (let i = 0; i < baseRows.length; i++)
-    if (baseRows[i][1] !== remoteRows[i][1])
-      fail_(
-        "CONFLICT",
-        "同時編集中に行の追加・削除・並べ替えがあり、自動統合できませんでした。",
-      );
+  const baseToRemote = Array(baseRows.length).fill(-1),
+    usedRemote = new Set(),
+    baseLineIds = {},
+    remoteLineIds = {};
+  baseRows.forEach(function (row, index) {
+    if (!row[1]) return;
+    if (!baseLineIds[row[1]]) baseLineIds[row[1]] = [];
+    baseLineIds[row[1]].push(index);
+  });
+  remoteRows.forEach(function (row, index) {
+    if (!row[1]) return;
+    if (!remoteLineIds[row[1]]) remoteLineIds[row[1]] = [];
+    remoteLineIds[row[1]].push(index);
+  });
+  Object.keys(baseLineIds).forEach(function (lineId) {
+    if (
+      baseLineIds[lineId].length === 1 &&
+      remoteLineIds[lineId] &&
+      remoteLineIds[lineId].length === 1
+    ) {
+      const baseIndex = baseLineIds[lineId][0],
+        remoteIndex = remoteLineIds[lineId][0];
+      baseToRemote[baseIndex] = remoteIndex;
+      usedRemote.add(remoteIndex);
+    }
+  });
+  const remoteByValue = {};
+  remoteRows.forEach(function (row, index) {
+    if (usedRemote.has(index)) return;
+    const key = JSON.stringify(row);
+    if (!remoteByValue[key]) remoteByValue[key] = [];
+    remoteByValue[key].push(index);
+  });
+  baseRows.forEach(function (row, baseIndex) {
+    if (baseToRemote[baseIndex] >= 0) return;
+    const matches = remoteByValue[JSON.stringify(row)] || [];
+    while (matches.length && usedRemote.has(matches[0])) matches.shift();
+    if (matches.length) {
+      const remoteIndex = matches.shift();
+      baseToRemote[baseIndex] = remoteIndex;
+      usedRemote.add(remoteIndex);
+    }
+  });
+  const unmatchedBase = [],
+    unmatchedRemote = [];
+  baseToRemote.forEach(function (remoteIndex, baseIndex) {
+    if (remoteIndex < 0) unmatchedBase.push(baseIndex);
+  });
+  remoteRows.forEach(function (_, remoteIndex) {
+    if (!usedRemote.has(remoteIndex)) unmatchedRemote.push(remoteIndex);
+  });
+  // With equal remaining counts, retain sheet order for legacy rows without a
+  // LineID. Exact matches above already account for ordinary row reordering.
+  if (unmatchedBase.length === unmatchedRemote.length)
+    unmatchedBase.forEach(function (baseIndex, index) {
+      const remoteIndex = unmatchedRemote[index];
+      baseToRemote[baseIndex] = remoteIndex;
+      usedRemote.add(remoteIndex);
+    });
   const merged = remoteRows.map(function (row) {
       return row.slice();
     }),
     conflicts = [];
   for (let r = 0; r < baseRows.length; r++) {
+    const remoteIndex = baseToRemote[r];
+    if (remoteIndex < 0) {
+      if (localIntentRows[r].some(function (value, column) {
+        return value !== baseRows[r][column];
+      }))
+        conflicts.push("削除された行 " + (r + 2));
+      continue;
+    }
     for (let c = 0; c < 8; c++) {
       const base = baseRows[r][c],
         local = localRows[r][c],
-        remote = remoteRows[r][c];
+        remote = remoteRows[remoteIndex][c];
       if (local === base) continue;
       if (remote !== base && remote !== local)
-        conflicts.push(SCRIPT_HEADERS[c] + (r + 2));
-      else merged[r][c] = local;
+        conflicts.push(SCRIPT_HEADERS[c] + (remoteIndex + 2));
+      else merged[remoteIndex][c] = local;
     }
   }
   if (conflicts.length)
     fail_(
       "CONFLICT",
-      "同じセルが別の場所でも変更されています（" +
+      "同じセル、または削除された行がこの画面でも変更されています（" +
         conflicts.slice(0, 8).join("、") +
         (conflicts.length > 8 ? " ほか" : "") +
         "）。",
     );
-  return merged;
+  return {
+    rows: merged,
+    sourceRows: merged.map(function (_, index) {
+      return index + 2;
+    }),
+  };
 }
 function saveTab_(body) {
   const book = spreadsheet_(),
@@ -356,6 +419,7 @@ function saveTab_(body) {
     fail_("INVALID_TAB", "このシートは編集できません。");
   const previous = snapshot_(book, sheet),
     baseRows = validateBaseRows_(body.baseRows || []),
+    localIntentRows = validateBaseRows_(body.rawRows || body.rows || []),
     stale =
       typeof body.revision !== "string" || body.revision !== previous.revision;
   validateRows_(
@@ -363,7 +427,10 @@ function saveTab_(body) {
     body.sourceRows,
     baseRows.length || previous.rows.length,
   );
+  if (localIntentRows.length !== body.rows.length)
+    fail_("BAD_REQUEST", "編集中の行データが一致しません。");
   let targetRows = body.rows,
+    targetSourceRows = body.sourceRows,
     merged = false;
   if (stale) {
     if (
@@ -374,7 +441,14 @@ function saveTab_(body) {
         "CONFLICT",
         "同時編集中に行の追加・削除・並べ替えがあり、自動統合できませんでした。",
       );
-    targetRows = mergeConcurrentRows_(baseRows, body.rows, previous.rows);
+    const mergeResult = mergeConcurrentRows_(
+      baseRows,
+      body.rows,
+      previous.rows,
+      localIntentRows,
+    );
+    targetRows = mergeResult.rows;
+    targetSourceRows = mergeResult.sourceRows;
     merged = true;
   }
   if (
@@ -396,9 +470,9 @@ function saveTab_(body) {
     return {
       values: row.map((value, c) => {
         const oldRow =
-          body.sourceRows[i] === null
+          targetSourceRows[i] === null
             ? null
-            : previous.cells[body.sourceRows[i] - 2];
+            : previous.cells[targetSourceRows[i] - 2];
         const source = oldRow?.values?.[c];
         const template = source || previous.cells[0]?.values?.[c] || {};
         const cell = {
@@ -459,7 +533,7 @@ function saveTab_(body) {
     });
   const directUpdate =
     targetRows.length === previous.rows.length &&
-    hasDirectSourceOrder_(body.sourceRows, previous.rows.length);
+    hasDirectSourceOrder_(targetSourceRows, previous.rows.length);
   if (directUpdate) {
     targetRows.forEach(function (row, r) {
       let changed = [];
