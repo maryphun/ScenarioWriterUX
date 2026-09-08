@@ -183,6 +183,25 @@ test("change review counts implicit node assignments explicitly", () => {
   const tab = importTab({ id: 1, name: "a", rows });
   assert.equal(pendingChanges(tab, { rows }).assignedNodes, 1);
 });
+test("change review matches source rows after an insertion instead of counting shifted rows", () => {
+  const rows = [
+    ["Start", "line-a", "", "First", "", "", "", ""],
+    ["", "line-b", "", "Second", "", "", "", ""],
+  ];
+  const tab = importTab({ id: 1, name: "a", rows });
+  const inserted = makeRow("Start", "白崎桃香");
+  inserted.text = "New line";
+  tab.rows.splice(1, 0, inserted);
+
+  assert.deepEqual(pendingChanges(tab, { rows }), {
+    cells: 4,
+    assignedNodes: 1,
+    rowsAdded: 1,
+    rowsRemoved: 0,
+    rows: 3,
+    previousRows: 2,
+  });
+});
 test("dialogue deletion removes the final row and preserves legacy continuation ownership", () => {
   const tab = importTab({
     id: 1,

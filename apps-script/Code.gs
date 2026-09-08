@@ -42,7 +42,7 @@ function initializeEditor() {
 }
 
 function doGet() {
-  return json_({ ok: true, service: "ScenarioWriterUX", version: 6 });
+  return json_({ ok: true, service: "ScenarioWriterUX", version: 7 });
 }
 function doPost(e) {
   try {
@@ -522,70 +522,141 @@ function saveTab_(body) {
     };
   });
   const requests = [];
-  const required = Math.max(targetRows.length, previous.rows.length) + 1;
-  if (required > sheet.getMaxRows())
-    requests.push({
-      appendDimension: {
-        sheetId: sheet.getSheetId(),
-        dimension: "ROWS",
-        length: required - sheet.getMaxRows(),
-      },
-    });
   const directUpdate =
     targetRows.length === previous.rows.length &&
     hasDirectSourceOrder_(targetSourceRows, previous.rows.length);
+  const existingSources = targetSourceRows.filter(function (source) {
+      return source !== null;
+    }),
+    keepsExistingOrder = existingSources.every(function (source, index) {
+      return index === 0 || source > existingSources[index - 1];
+    });
+  function addCellUpdates_(row, r, oldRow, forceAll) {
+    let changed = forceAll ? [0, 1, 2, 3, 4, 5, 6, 7] : [];
+    if (!forceAll)
+      for (let c = 0; c < 8; c++)
+        if (row[c] !== oldRow[c]) changed.push(c);
+    if (
+      changed.length &&
+      (row[2] !== oldRow[2] ||
+        isInstructionRow_(row) !== isInstructionRow_(oldRow))
+    )
+      changed = [0, 1, 2, 3, 4, 5, 6, 7];
+    if (!changed.length) return;
+    const groups = [];
+    changed.forEach(function (column) {
+      const last = groups[groups.length - 1];
+      if (last && last[last.length - 1] + 1 === column) last.push(column);
+      else groups.push([column]);
+    });
+    groups.forEach(function (group) {
+      const start = group[0],
+        end = group[group.length - 1] + 1;
+      requests.push({
+        updateCells: {
+          range: {
+            sheetId: sheet.getSheetId(),
+            startRowIndex: r + 1,
+            endRowIndex: r + 2,
+            startColumnIndex: start,
+            endColumnIndex: end,
+          },
+          rows: [{ values: rows[r].values.slice(start, end) }],
+          fields:
+            "userEnteredValue,userEnteredFormat,dataValidation,note,textFormatRuns",
+        },
+      });
+    });
+  }
   if (directUpdate) {
     targetRows.forEach(function (row, r) {
-      let changed = [];
-      for (let c = 0; c < 8; c++)
-        if (row[c] !== previous.rows[r][c]) changed.push(c);
-      if (
-        changed.length &&
-        (row[2] !== previous.rows[r][2] ||
-          isInstructionRow_(row) !== isInstructionRow_(previous.rows[r]))
-      )
-        changed = [0, 1, 2, 3, 4, 5, 6, 7];
-      if (!changed.length) return;
-      const groups = [];
-      changed.forEach(function (column) {
-        const last = groups[groups.length - 1];
-        if (last && last[last.length - 1] + 1 === column) last.push(column);
-        else groups.push([column]);
+      addCellUpdates_(row, r, previous.rows[r], false);
+    });
+  } else if (keepsExistingOrder) {
+    const retainedSources = new Set(existingSources),
+      deletedSources = [];
+    const requiredRows = targetRows.length + 1;
+    if (requiredRows > sheet.getMaxRows())
+      requests.push({
+        appendDimension: {
+          sheetId: sheet.getSheetId(),
+          dimension: "ROWS",
+          length: requiredRows - sheet.getMaxRows(),
+        },
       });
-      groups.forEach(function (group) {
-        const start = group[0],
-          end = group[group.length - 1] + 1;
+    for (let source = 2; source < previous.rows.length + 2; source++)
+      if (!retainedSources.has(source)) deletedSources.push(source);
+    deletedSources
+      .slice()
+      .sort(function (a, b) {
+        return b - a;
+      })
+      .forEach(function (source) {
         requests.push({
-          updateCells: {
+          deleteRange: {
             range: {
               sheetId: sheet.getSheetId(),
-              startRowIndex: r + 1,
-              endRowIndex: r + 2,
-              startColumnIndex: start,
-              endColumnIndex: end,
+              startRowIndex: source - 1,
+              endRowIndex: source,
+              startColumnIndex: 0,
+              endColumnIndex: 8,
             },
-            rows: [{ values: rows[r].values.slice(start, end) }],
-            fields:
-              "userEnteredValue,userEnteredFormat,dataValidation,note,textFormatRuns",
+            shiftDimension: "ROWS",
           },
         });
       });
+    let populatedRows = previous.rows.length - deletedSources.length;
+    targetSourceRows.forEach(function (source, index) {
+      if (source !== null) return;
+      if (index < populatedRows)
+        requests.push({
+          insertRange: {
+            range: {
+              sheetId: sheet.getSheetId(),
+              startRowIndex: index + 1,
+              endRowIndex: index + 2,
+              startColumnIndex: 0,
+              endColumnIndex: 8,
+            },
+            shiftDimension: "ROWS",
+          },
+        });
+      populatedRows++;
     });
-  } else if (required > 1)
-    requests.push({
-      updateCells: {
-        range: {
+    targetRows.forEach(function (row, r) {
+      const source = targetSourceRows[r],
+        oldRow =
+          source === null
+            ? ["", "", "", "", "", "", "", ""]
+            : previous.rows[source - 2];
+      addCellUpdates_(row, r, oldRow, source === null);
+    });
+  } else {
+    const requiredRows = targetRows.length + 1;
+    if (requiredRows > sheet.getMaxRows())
+      requests.push({
+        appendDimension: {
           sheetId: sheet.getSheetId(),
-          startRowIndex: 1,
-          endRowIndex: required,
-          startColumnIndex: 0,
-          endColumnIndex: 8,
+          dimension: "ROWS",
+          length: requiredRows - sheet.getMaxRows(),
         },
-        rows: rows,
-        fields:
-          "userEnteredValue,userEnteredFormat,dataValidation,note,textFormatRuns",
-      },
-    });
+      });
+    if (targetRows.length)
+      requests.push({
+        updateCells: {
+          range: {
+            sheetId: sheet.getSheetId(),
+            startRowIndex: 1,
+            endRowIndex: targetRows.length + 1,
+            startColumnIndex: 0,
+            endColumnIndex: 8,
+          },
+          rows: rows,
+          fields:
+            "userEnteredValue,userEnteredFormat,dataValidation,note,textFormatRuns",
+        },
+      });
+  }
   if (requests.length) {
     const folderId =
       PropertiesService.getScriptProperties().getProperty("BACKUP_FOLDER_ID");

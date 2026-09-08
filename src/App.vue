@@ -2053,6 +2053,10 @@ onBeforeUnmount(() => {
         <div v-for="t in dirtyTabs" :key="t.id" class="sync-item">
           <strong>{{ t.name }}</strong
           ><span>{{ pendingChanges(t, baseline[t.id]).cells }} セルの変更</span
+          ><small v-if="pendingChanges(t, baseline[t.id]).rowsAdded"
+            >{{ pendingChanges(t, baseline[t.id]).rowsAdded }} 行を追加します。</small
+          ><small v-if="pendingChanges(t, baseline[t.id]).rowsRemoved"
+            >{{ pendingChanges(t, baseline[t.id]).rowsRemoved }} 行を削除します。</small
           ><small v-if="pendingChanges(t, baseline[t.id]).assignedNodes"
             >{{
               pendingChanges(t, baseline[t.id]).assignedNodes

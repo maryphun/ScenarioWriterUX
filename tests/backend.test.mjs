@@ -104,7 +104,7 @@ test("all data actions require the key before reading a workbook or Drive", () =
     assert.equal(result.error.code, "UNAUTHORIZED");
   }
   assert.equal(c.doGet().ok, true);
-  assert.equal(c.doGet().version, 6);
+  assert.equal(c.doGet().version, 7);
 });
 test("revision serialization ignores object property insertion order", () => {
   const { context: c } = backend();
@@ -158,6 +158,74 @@ test("saving backs up first and writes only changed cells with source metadata",
   assert.equal(changed.note, "Keep this note");
   assert.equal(changed.userEnteredFormat.textFormat.bold, true);
   assert.equal(changed.dataValidation.strict, true);
+});
+test("inserting a local row shifts only A:H and writes only the new row", () => {
+  const { context: c, body, previous, backups, batches } = writableBackend();
+  const first = ["Scene", "line-a", "", "最初", "", "", "", ""],
+    second = ["Scene", "line-b", "", "最後", "", "", "", ""],
+    inserted = ["Scene", "line-new", "", "追加", "", "", "", ""];
+  previous.rows = [plain(first), plain(second)];
+  previous.cells = [
+    { values: Array.from({ length: 8 }, () => ({})) },
+    { values: Array.from({ length: 8 }, () => ({})) },
+  ];
+  body.rows = [plain(first), plain(inserted), plain(second)];
+  body.sourceRows = [2, null, 3];
+
+  c.saveTab_(body);
+
+  assert.equal(backups.length, 1);
+  assert.equal(batches.length, 1);
+  const requests = batches[0][0].requests;
+  assert.deepEqual(requests[0].insertRange, {
+    range: {
+      sheetId: 7,
+      startRowIndex: 2,
+      endRowIndex: 3,
+      startColumnIndex: 0,
+      endColumnIndex: 8,
+    },
+    shiftDimension: "ROWS",
+  });
+  assert.deepEqual(requests[1].updateCells.range, {
+    sheetId: 7,
+    startRowIndex: 2,
+    endRowIndex: 3,
+    startColumnIndex: 0,
+    endColumnIndex: 8,
+  });
+  assert.equal(requests.length, 2);
+});
+test("deleting a local row shifts only A:H without rewriting survivors", () => {
+  const { context: c, body, previous, backups, batches } = writableBackend();
+  const first = ["Scene", "line-a", "", "残す", "", "", "", ""],
+    second = ["Scene", "line-b", "", "削除", "", "", "", ""];
+  previous.rows = [plain(first), plain(second)];
+  previous.cells = [
+    { values: Array.from({ length: 8 }, () => ({})) },
+    { values: Array.from({ length: 8 }, () => ({})) },
+  ];
+  body.rows = [plain(first)];
+  body.sourceRows = [2];
+
+  c.saveTab_(body);
+
+  assert.equal(backups.length, 1);
+  assert.equal(batches.length, 1);
+  assert.deepEqual(batches[0][0].requests, [
+    {
+      deleteRange: {
+        range: {
+          sheetId: 7,
+          startRowIndex: 2,
+          endRowIndex: 3,
+          startColumnIndex: 0,
+          endColumnIndex: 8,
+        },
+        shiftDimension: "ROWS",
+      },
+    },
+  ]);
 });
 test("stale saves merge non-overlapping cells and omit the other writer's cells", () => {
   const { context: c, body, previous, backups, batches } = writableBackend();
@@ -308,7 +376,8 @@ test("instruction rows are black across A:H with bold white text", () => {
   body.rows = [["[ここで戦闘を挿入]", "", "", "", "", "", "", ""]];
   body.sourceRows = [null];
   c.saveTab_(body);
-  const cells = batches[0][0].requests[0].updateCells.rows[0].values;
+  const cells = batches[0][0].requests.find((request) => request.updateCells)
+    .updateCells.rows[0].values;
   assert.equal(cells[0].userEnteredValue.stringValue, "[ここで戦闘を挿入]");
   for (const cell of cells) {
     assert.deepEqual(cell.userEnteredFormat.backgroundColor, {

@@ -187,23 +187,41 @@ export function renameNode(workbook, tabId, oldName, newName) {
 }
 export function pendingChanges(tab, baseline) {
   const rows = serialiseTab(tab),
-    oldRows = baseline?.rows || [];
+    oldRows = baseline?.rows || [],
+    referencedRows = new Set();
   let cells = 0,
-    assignedNodes = 0;
-  rows.forEach((row, i) =>
+    assignedNodes = 0,
+    rowsAdded = 0;
+  rows.forEach((row, i) => {
+    const sourceRow = tab.rows[i]?.sourceRow,
+      sourceIndex = Number.isInteger(sourceRow) ? sourceRow - 2 : -1,
+      oldRow = sourceIndex >= 0 ? oldRows[sourceIndex] : null;
+    if (oldRow) referencedRows.add(sourceIndex);
+    else rowsAdded++;
     row.forEach((value, c) => {
-      if (value !== String(oldRows[i]?.[c] ?? "")) {
-        cells++;
-        if (!c && value && !oldRows[i]?.[c] && !isInstructionRow(tab.rows[i]))
+      if (value !== String(oldRow?.[c] ?? "")) {
+        const implicitNode =
+          !c &&
+          oldRow &&
+          value &&
+          !oldRow[c] &&
+          !isInstructionRow(tab.rows[i]);
+        if (implicitNode)
           assignedNodes++;
+        else cells++;
       }
-    }),
-  );
-  for (let i = rows.length; i < oldRows.length; i++)
-    cells += oldRows[i].filter(Boolean).length;
+    });
+  });
+  const rowsRemoved = oldRows.reduce((count, row, index) => {
+    if (referencedRows.has(index)) return count;
+    cells += row.filter(Boolean).length;
+    return count + 1;
+  }, 0);
   return {
     cells,
     assignedNodes,
+    rowsAdded,
+    rowsRemoved,
     rows: rows.length,
     previousRows: oldRows.length,
   };
