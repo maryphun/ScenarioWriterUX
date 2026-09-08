@@ -8,7 +8,7 @@ import {
   makeInstructionRow,
   isInstructionRow,
   instructionText,
-  sampleWorkbook,
+  emptyWorkbook,
   validateNodeName,
   findNode,
   exportYarn,
@@ -17,6 +17,70 @@ import {
   removeScriptRow,
 } from "../src/lib/workbook.js";
 import { parseCommands } from "../src/lib/commands.js";
+
+function fixtureWorkbook() {
+  return {
+    title: "脚本",
+    speakers: [],
+    tabs: [
+      importTab({
+        id: 1,
+        name: "チュートリアル",
+        revision: "fixture",
+        rows: [
+          [
+            "Tutorial_Start",
+            "",
+            "",
+            "はじめまして！",
+            "",
+            "",
+            "[background:BG_City_Day:instant]",
+            "",
+          ],
+          [
+            "Tutorial_Start",
+            "",
+            "白崎桃香",
+            "こんにちは",
+            "",
+            "",
+            "",
+            "",
+          ],
+          [
+            "Tutorial_Start",
+            "",
+            "",
+            "",
+            "Aにする",
+            "Tutorial_A",
+            "",
+            "",
+          ],
+          [
+            "Tutorial_Start",
+            "",
+            "",
+            "",
+            "Bにする",
+            "Tutorial_B",
+            "",
+            "",
+          ],
+          ["Tutorial_A", "", "白崎桃香", "Aを選んだね"],
+          ["Tutorial_B", "", "奥殿テトラ", "Bを選んだね"],
+        ],
+      }),
+    ],
+  };
+}
+
+test("a new editor session contains no sample workbook", () => {
+  const workbook = emptyWorkbook();
+  assert.deepEqual(workbook.tabs, []);
+  assert.deepEqual(workbook.speakers, []);
+});
 
 test("legacy blank node continuations are visible; blank separators and literal text are retained", () => {
   const rows = [
@@ -71,7 +135,7 @@ test("instruction rows remain in their scene but never become nodes or Yarn", ()
   assert.equal(isInstructionRow(created), true);
 });
 test("choice rows form groups; existing and new node names are checked", () => {
-  const w = sampleWorkbook(),
+  const w = fixtureWorkbook(),
     lines = sceneLines(w.tabs[0], "Tutorial_Start");
   assert.equal(choiceGroup(lines, 2).length, 2);
   assert.equal(choiceGroup(lines, 3).length, 2);
@@ -81,14 +145,14 @@ test("choice rows form groups; existing and new node names are checked", () => {
   assert.equal(findNode(w, "Tutorial_A").name, "Tutorial_A");
 });
 test("legacy starred names are preserved but not emitted as invalid Yarn", () => {
-  const w = sampleWorkbook();
+  const w = fixtureWorkbook();
   w.tabs[0].rows[0].node = "*Test";
   assert.equal(findNode(w, "Test").name, "*Test");
   assert.throws(() => exportYarn(w, parseCommands), /記号/);
   assert.equal(serialiseTab(w.tabs[0])[0][0], "*Test");
 });
 test("Yarn export follows commands -> dialogue -> choices and jump mapping", () => {
-  const w = sampleWorkbook();
+  const w = fixtureWorkbook();
   const yarn = exportYarn(w, parseCommands);
   assert.match(
     yarn,
@@ -100,7 +164,7 @@ test("Yarn export follows commands -> dialogue -> choices and jump mapping", () 
   assert.throws(() => exportYarn(w, parseCommands), /Missing/);
 });
 test("Yarn export keeps Toka face commands profile-driven", () => {
-  const w = sampleWorkbook();
+  const w = fixtureWorkbook();
   w.tabs[0].rows[0].command =
     "[char:show:toka:Ch_Toka_Face_default:0.5:0.5:false]";
   const yarn = exportYarn(w, parseCommands);

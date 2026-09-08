@@ -32,7 +32,8 @@ npm run build
 - Commands can be inserted using forms or dragged from the palette, reordered, edited, and removed. The raw command field preserves unsupported/legacy text.
 - Create choices with a new node name or type an existing node. Preview choices navigate the graph and carry scene state into the destination. Return to the branch point with “分岐元へ”. Directly selecting a scene previews it from a clean state.
 - Previous/next controls are centered under the preview. Play replays the current line's commands; seeking is silent.
-- Browser drafts and media use IndexedDB. Use “シートに反映” to review and save changed tabs. The backend checks revisions and retains backups. Existing `Master` entries supply speaker names/colors, without displaying that technical label in the editor.
+- Every page load starts without scenario data and opens the connection dialog. The connected state appears only after a fresh spreadsheet read; cached workbooks and the old sample are never restored. Media can remain in IndexedDB, while scenario edits remain in the current page until “シートに反映” succeeds. Closing a page with pending edits triggers the browser's unsaved-changes warning.
+- Saves update only changed cells when row structure is unchanged. If another writer edited different cells after the current writer's last read, the backend merges both sets of changes. If both writers changed the same cell, or rows were added, removed, or reordered concurrently, the save stops and identifies the conflict so neither version is silently discarded. Existing `Master` entries supply speaker names/colors, without displaying that technical label in the editor.
 - Share each asset through its settings to store it in the API's private Drive folder. Other sessions load those assets on connection or using “共有素材を読み込む”. Local-only assets are labeled accordingly. Uploads are limited to 10 MB per file; there is no fixed character count limit.
 - Use the trash icon on an asset row to remove it. Local assets are deleted from browser storage. Shared assets are removed from the shared index and moved to Google Drive Trash, where they remain recoverable. The editor warns when commands still reference the asset.
 
@@ -44,7 +45,7 @@ npm run build
 - The renderer implements the provided command families and aliases. Its default preview uses a 1.1 stage-height sprite and a -175 px bottom offset at 1080p; both values remain adjustable. Missing images remain labeled placeholders.
 - The preview approximates the Unity canvas and UI; it does not execute arbitrary Yarn instructions, gameplay code, battle transitions or other custom commands. Unsupported commands are retained and identified. Backgrounds stretch to the stage like the current Unity background controller. Native text layout/fonts and engine rendering can still differ.
 - Browser audio needs user interaction and a supported uploaded audio format. Merely selecting a line does not play sound.
-- JSON backup includes scenario text, not binary assets. Restoring a backup opens a local draft instead of silently overwriting a remote workbook.
+- JSON backup includes scenario text, not binary assets. Restoring a backup opens it only in the current page and never marks the editor as connected.
 - The endpoint is fixed to the user-provided spreadsheet; no private scenario content is committed to GitHub. Authentication details and backup behavior are in [the backend guide](apps-script/DEPLOY.md).
 
 Official deployment references: [Vite on GitHub Pages](https://vite.dev/guide/static-deploy.html#github-pages), [Apps Script Web Apps](https://developers.google.com/apps-script/guides/web).

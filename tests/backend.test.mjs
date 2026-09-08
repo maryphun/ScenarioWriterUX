@@ -61,14 +61,16 @@ function writableBackend() {
     rows: [["Scene", "", "", "Original", "", "", "", ""]],
     cells: [
       {
-        values: [
-          {
-            userEnteredValue: { stringValue: "Scene" },
-            userEnteredFormat: { textFormat: { bold: true } },
-            note: "Keep this note",
-            dataValidation: { strict: true },
-          },
-        ],
+        values: Array.from({ length: 8 }, (_, index) =>
+          index === 3
+            ? {
+                userEnteredValue: { stringValue: "Original" },
+                userEnteredFormat: { textFormat: { bold: true } },
+                note: "Keep this note",
+                dataValidation: { strict: true },
+              }
+            : {},
+        ),
       },
     ],
   };
@@ -102,7 +104,7 @@ test("all data actions require the key before reading a workbook or Drive", () =
     assert.equal(result.error.code, "UNAUTHORIZED");
   }
   assert.equal(c.doGet().ok, true);
-  assert.equal(c.doGet().version, 4);
+  assert.equal(c.doGet().version, 5);
 });
 test("revision serialization ignores object property insertion order", () => {
   const { context: c } = backend();
@@ -134,7 +136,7 @@ test("stale revisions and non-script tabs never create backups or write cells", 
   assert.equal(backups.length, 0);
   assert.equal(batches.length, 0);
 });
-test("saving backs up first, writes literal strings, and preserves source metadata within A2:H", () => {
+test("saving backs up first and writes only changed cells with source metadata", () => {
   const { context: c, body, backups, batches } = writableBackend();
   c.saveTab_(body);
   assert.equal(backups.length, 1);
@@ -145,17 +147,71 @@ test("saving backs up first, writes literal strings, and preserves source metada
     sheetId: 7,
     startRowIndex: 1,
     endRowIndex: 2,
-    startColumnIndex: 0,
-    endColumnIndex: 8,
+    startColumnIndex: 3,
+    endColumnIndex: 4,
   });
   assert.equal(
-    update.rows[0].values[3].userEnteredValue.stringValue,
+    update.rows[0].values[0].userEnteredValue.stringValue,
     body.rows[0][3],
   );
-  const first = update.rows[0].values[0];
-  assert.equal(first.note, "Keep this note");
-  assert.equal(first.userEnteredFormat.textFormat.bold, true);
-  assert.equal(first.dataValidation.strict, true);
+  const changed = update.rows[0].values[0];
+  assert.equal(changed.note, "Keep this note");
+  assert.equal(changed.userEnteredFormat.textFormat.bold, true);
+  assert.equal(changed.dataValidation.strict, true);
+});
+test("stale saves merge non-overlapping cells and omit the other writer's cells", () => {
+  const { context: c, body, previous, backups, batches } = writableBackend();
+  const baseRows = plain(previous.rows);
+  previous.revision = "remote-revision";
+  previous.rows[0][7] = "他の担当者のメモ";
+  body.revision = "base-revision";
+  body.baseRows = baseRows;
+
+  const result = c.saveTab_(body);
+
+  assert.equal(result.merged, true);
+  assert.equal(backups.length, 1);
+  assert.equal(batches.length, 1);
+  const updates = batches[0][0].requests.map((request) => request.updateCells);
+  assert.deepEqual(updates[0].range, {
+    sheetId: 7,
+    startRowIndex: 1,
+    endRowIndex: 2,
+    startColumnIndex: 3,
+    endColumnIndex: 4,
+  });
+  assert.equal(updates[0].rows[0].values[0].userEnteredValue.stringValue, body.rows[0][3]);
+});
+test("stale saves report the exact overlapping cell without writing", () => {
+  const { context: c, body, previous, backups, batches } = writableBackend();
+  const baseRows = plain(previous.rows);
+  previous.revision = "remote-revision";
+  previous.rows[0][3] = "他の担当者の本文";
+  body.revision = "base-revision";
+  body.baseRows = baseRows;
+
+  assert.throws(
+    () => c.saveTab_(body),
+    (error) =>
+      error.apiCode === "CONFLICT" && error.message.includes("Text_JP2"),
+  );
+  assert.equal(backups.length, 0);
+  assert.equal(batches.length, 0);
+});
+test("stale saves stop when row structure changed concurrently", () => {
+  const { context: c, body, previous, backups, batches } = writableBackend();
+  const baseRows = plain(previous.rows);
+  previous.revision = "remote-revision";
+  previous.rows.push(["Other", "new_remote_line", "", "追加された行", "", "", "", ""]);
+  body.revision = "base-revision";
+  body.baseRows = baseRows;
+
+  assert.throws(
+    () => c.saveTab_(body),
+    (error) => error.apiCode === "CONFLICT" && error.message.includes("行"),
+  );
+  assert.equal(backups.length, 0);
+  assert.equal(batches.length, 0);
 });
 test("instruction rows are black across A:H with bold white text", () => {
   const { context: c, body, batches } = writableBackend();

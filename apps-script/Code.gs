@@ -42,7 +42,7 @@ function initializeEditor() {
 }
 
 function doGet() {
-  return json_({ ok: true, service: "ScenarioWriterUX", version: 4 });
+  return json_({ ok: true, service: "ScenarioWriterUX", version: 5 });
 }
 function doPost(e) {
   try {
@@ -286,15 +286,97 @@ function isInstructionRow_(row) {
     })
   );
 }
+function validateBaseRows_(rows) {
+  if (!Array.isArray(rows) || rows.length > MAX_SCRIPT_ROWS)
+    fail_("BAD_REQUEST", "同期元の行データが不正です。");
+  rows.forEach(function (row) {
+    if (
+      !Array.isArray(row) ||
+      row.length !== 8 ||
+      row.some(function (value) {
+        return typeof value !== "string" || value.length > 49000;
+      })
+    )
+      fail_("BAD_REQUEST", "同期元のセル値が不正です。");
+  });
+  return rows;
+}
+function hasDirectSourceOrder_(sourceRows, count) {
+  return (
+    sourceRows.length === count &&
+    sourceRows.every(function (source, index) {
+      return source === index + 2;
+    })
+  );
+}
+function mergeConcurrentRows_(baseRows, localRows, remoteRows) {
+  if (
+    baseRows.length !== localRows.length ||
+    baseRows.length !== remoteRows.length
+  )
+    fail_(
+      "CONFLICT",
+      "同時編集中に行の追加・削除・並べ替えがあり、自動統合できませんでした。",
+    );
+  for (let i = 0; i < baseRows.length; i++)
+    if (baseRows[i][1] !== remoteRows[i][1])
+      fail_(
+        "CONFLICT",
+        "同時編集中に行の追加・削除・並べ替えがあり、自動統合できませんでした。",
+      );
+  const merged = remoteRows.map(function (row) {
+      return row.slice();
+    }),
+    conflicts = [];
+  for (let r = 0; r < baseRows.length; r++) {
+    for (let c = 0; c < 8; c++) {
+      const base = baseRows[r][c],
+        local = localRows[r][c],
+        remote = remoteRows[r][c];
+      if (local === base) continue;
+      if (remote !== base && remote !== local)
+        conflicts.push(SCRIPT_HEADERS[c] + (r + 2));
+      else merged[r][c] = local;
+    }
+  }
+  if (conflicts.length)
+    fail_(
+      "CONFLICT",
+      "同じセルが別の場所でも変更されています（" +
+        conflicts.slice(0, 8).join("、") +
+        (conflicts.length > 8 ? " ほか" : "") +
+        "）。",
+    );
+  return merged;
+}
 function saveTab_(body) {
   const book = spreadsheet_(),
     sheet = book.getSheets().find((s) => s.getSheetId() === body.tabId);
   if (!sheet || !isScriptSheet_(sheet))
     fail_("INVALID_TAB", "このシートは編集できません。");
-  const previous = snapshot_(book, sheet);
-  if (typeof body.revision !== "string" || body.revision !== previous.revision)
-    fail_("CONFLICT", "読み込み後にシートが変更されています。");
-  validateRows_(body.rows, body.sourceRows, previous.rows.length);
+  const previous = snapshot_(book, sheet),
+    baseRows = validateBaseRows_(body.baseRows || []),
+    stale =
+      typeof body.revision !== "string" || body.revision !== previous.revision;
+  validateRows_(
+    body.rows,
+    body.sourceRows,
+    baseRows.length || previous.rows.length,
+  );
+  let targetRows = body.rows,
+    merged = false;
+  if (stale) {
+    if (
+      !baseRows.length ||
+      !hasDirectSourceOrder_(body.sourceRows, baseRows.length)
+    )
+      fail_(
+        "CONFLICT",
+        "同時編集中に行の追加・削除・並べ替えがあり、自動統合できませんでした。",
+      );
+    targetRows = mergeConcurrentRows_(baseRows, body.rows, previous.rows);
+    merged = true;
+  }
   if (
     previous.cells.some((row) =>
       (row.values || []).some(
@@ -306,19 +388,10 @@ function saveTab_(body) {
       "FORMULA_PRESENT",
       "A〜H 列に数式があります。数式を保護するため、このシートは保存できません。",
     );
-  const folderId =
-    PropertiesService.getScriptProperties().getProperty("BACKUP_FOLDER_ID");
-  if (!folderId)
-    fail_("NOT_CONFIGURED", "initializeEditor を実行してください。");
-  DriveApp.getFolderById(folderId).createFile(
-    "sheet-" + sheet.getSheetId() + "-" + Date.now() + ".json",
-    JSON.stringify(previous),
-    MimeType.PLAIN_TEXT,
-  );
   const colors = Object.fromEntries(
     readSpeakers_(book).map((s) => [s.name, s.color]),
   );
-  const rows = body.rows.map((row, i) => {
+  const rows = targetRows.map((row, i) => {
     const instruction = isInstructionRow_(row);
     return {
       values: row.map((value, c) => {
@@ -374,9 +447,8 @@ function saveTab_(body) {
       }),
     };
   });
-  // One atomic Sheets batch: explicit string values prevent formula injection.
   const requests = [];
-  const required = Math.max(body.rows.length, previous.rows.length) + 1;
+  const required = Math.max(targetRows.length, previous.rows.length) + 1;
   if (required > sheet.getMaxRows())
     requests.push({
       appendDimension: {
@@ -385,7 +457,47 @@ function saveTab_(body) {
         length: required - sheet.getMaxRows(),
       },
     });
-  if (required > 1)
+  const directUpdate =
+    targetRows.length === previous.rows.length &&
+    hasDirectSourceOrder_(body.sourceRows, previous.rows.length);
+  if (directUpdate) {
+    targetRows.forEach(function (row, r) {
+      let changed = [];
+      for (let c = 0; c < 8; c++)
+        if (row[c] !== previous.rows[r][c]) changed.push(c);
+      if (
+        changed.length &&
+        (row[2] !== previous.rows[r][2] ||
+          isInstructionRow_(row) !== isInstructionRow_(previous.rows[r]))
+      )
+        changed = [0, 1, 2, 3, 4, 5, 6, 7];
+      if (!changed.length) return;
+      const groups = [];
+      changed.forEach(function (column) {
+        const last = groups[groups.length - 1];
+        if (last && last[last.length - 1] + 1 === column) last.push(column);
+        else groups.push([column]);
+      });
+      groups.forEach(function (group) {
+        const start = group[0],
+          end = group[group.length - 1] + 1;
+        requests.push({
+          updateCells: {
+            range: {
+              sheetId: sheet.getSheetId(),
+              startRowIndex: r + 1,
+              endRowIndex: r + 2,
+              startColumnIndex: start,
+              endColumnIndex: end,
+            },
+            rows: [{ values: rows[r].values.slice(start, end) }],
+            fields:
+              "userEnteredValue,userEnteredFormat,dataValidation,note,textFormatRuns",
+          },
+        });
+      });
+    });
+  } else if (required > 1)
     requests.push({
       updateCells: {
         range: {
@@ -400,10 +512,23 @@ function saveTab_(body) {
           "userEnteredValue,userEnteredFormat,dataValidation,note,textFormatRuns",
       },
     });
-  if (requests.length)
+  if (requests.length) {
+    const folderId =
+      PropertiesService.getScriptProperties().getProperty("BACKUP_FOLDER_ID");
+    if (!folderId)
+      fail_("NOT_CONFIGURED", "initializeEditor を実行してください。");
+    DriveApp.getFolderById(folderId).createFile(
+      "sheet-" + sheet.getSheetId() + "-" + Date.now() + ".json",
+      JSON.stringify(previous),
+      MimeType.PLAIN_TEXT,
+    );
+    // One atomic Sheets batch. Unrelated concurrent cells are omitted.
     Sheets.Spreadsheets.batchUpdate({ requests: requests }, book.getId());
+  }
   SpreadsheetApp.flush();
-  return publicTab_(snapshot_(book, sheet));
+  const result = publicTab_(snapshot_(book, sheet));
+  result.merged = merged;
+  return result;
 }
 
 function assetFolder_() {

@@ -23,12 +23,8 @@ async function transaction(store, mode, operation) {
     tx.onabort = () => reject(tx.error);
   });
 }
-export const saveDraft = (key, value) =>
-  transaction("drafts", "readwrite", (store) =>
-    store.put(JSON.parse(JSON.stringify(value)), key),
-  );
-export const loadDraft = (key) =>
-  transaction("drafts", "readonly", (store) => store.get(key));
+export const clearDrafts = () =>
+  transaction("drafts", "readwrite", (store) => store.clear());
 export const putAsset = (asset) =>
   transaction("assets", "readwrite", (store) => store.put(asset));
 export const readAssets = () =>

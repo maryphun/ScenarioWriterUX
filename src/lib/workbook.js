@@ -20,6 +20,14 @@ export const KEYS = [
   "comment",
 ];
 export const uid = () => globalThis.crypto.randomUUID().replaceAll("-", "");
+export function emptyWorkbook() {
+  return {
+    title: "",
+    spreadsheetId: SHEET_ID,
+    speakers: [],
+    tabs: [],
+  };
+}
 export function makeRow(node = "", speaker = "") {
   return {
     key: uid(),
@@ -227,45 +235,6 @@ export function workbookIssues(workbook) {
     }
   return [...new Set(result)];
 }
-export function sampleWorkbook() {
-  const tab = {
-    id: "local-tutorial",
-    name: "チュートリアル",
-    revision: "",
-    rows: [
-      [
-        "Tutorial_Start",
-        "",
-        "",
-        "はじめまして！",
-        "",
-        "",
-        "[background:BG_City_Day:instant]",
-        "",
-      ],
-      ["Tutorial_Start", "", "白崎桃香", "こんにちは", "", "", "", ""],
-      ["Tutorial_Start", "", "", "", "Aにする", "Tutorial_A", "", ""],
-      ["Tutorial_Start", "", "", "", "Bにする", "Tutorial_B", "", ""],
-      ["Tutorial_A", "", "白崎桃香", "Aを選んだね", "", "", "", ""],
-      ["Tutorial_B", "", "奥殿テトラ", "Bを選んだね", "", "", "", ""],
-    ],
-  };
-  return {
-    title: "脚本",
-    spreadsheetId: SHEET_ID,
-    demo: true,
-    speakers: [
-      { name: "白崎桃香", color: "#F8D7E7" },
-      { name: "ピュアプリピーチ", color: "#ffb6fe" },
-      { name: "奥殿テトラ", color: "#E4D7F5" },
-      { name: "あなた", color: "#D6E5FA" },
-      { name: "ピュアルン", color: "#D2F0F3" },
-      { name: "宮森楓", color: "#FFF1B8" },
-    ],
-    tabs: [importTab(tab)],
-  };
-}
-
 function yarnCommand(command) {
   const value = command.trim();
   if (value.startsWith("<<") && value.endsWith(">>")) return value;

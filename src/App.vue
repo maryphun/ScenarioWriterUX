@@ -54,6 +54,7 @@ import {
   SHEET_ID,
   KEYS,
   uid,
+  emptyWorkbook,
   makeRow,
   makeInstructionRow,
   isInstructionRow,
@@ -65,7 +66,6 @@ import {
   sceneEntries,
   removeScriptRow,
   serialiseTab,
-  sampleWorkbook,
   allNodes,
   findNode,
   validateNodeName,
@@ -76,8 +76,7 @@ import {
   renameNode,
 } from "./lib/workbook.js";
 import {
-  saveDraft,
-  loadDraft,
+  clearDrafts,
   readAssets,
   putAsset,
   removeAsset as removeStoredAsset,
@@ -87,17 +86,17 @@ import { request, DEFAULT_API_URL } from "./lib/api.js";
 import { DEFAULT_PREVIEW_OPTIONS } from "./lib/preview.js";
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
-const workbook = ref(sampleWorkbook()),
-  tabId = ref(workbook.value.tabs[0].id),
-  nodeName = ref("Tutorial_Start"),
-  selectedKey = ref(workbook.value.tabs[0].rows[1].key);
+const workbook = ref(emptyWorkbook()),
+  tabId = ref(""),
+  nodeName = ref(""),
+  selectedKey = ref("");
 const baseline = ref({}),
   baselineSignatures = ref({}),
   assets = ref([]),
   message = ref(""),
   error = ref(""),
   busy = ref(false),
-  draftStatus = ref("読み込み中…");
+  dataStatus = ref("スプレッドシート未読込");
 const endpoint = ref(
     localStorage.getItem("scenario-api-url") ||
       import.meta.env.VITE_APPS_SCRIPT_URL ||
@@ -219,11 +218,9 @@ const characterForm = ref({
   flip: "false",
 });
 const hideCharacterForm = ref({ ...DEFAULT_CHARACTER_TRANSITION });
-const connected = computed(() => !workbook.value.demo);
-let draftTimer,
-  noticeTimer,
+const connected = ref(false);
+let noticeTimer,
   composition = false,
-  loadingDraft = true,
   focusCheckpoint = false;
 
 function notify(text) {
@@ -284,33 +281,6 @@ function redo() {
   );
   restore(s);
 }
-async function persist() {
-  try {
-    await saveDraft(workbook.value.demo ? "demo" : "sheet:" + SHEET_ID, {
-      workbook: workbook.value,
-      baseline: baseline.value,
-      baselineSignatures: baselineSignatures.value,
-      tabId: tabId.value,
-      node: nodeName.value,
-      key: selectedKey.value,
-    });
-    draftStatus.value = "下書き保存済み";
-  } catch {
-    draftStatus.value = "下書き保存に失敗";
-    error.value =
-      "ブラウザーへの保存に失敗しました。バックアップを書き出してください。";
-  }
-}
-watch(
-  workbook,
-  () => {
-    if (loadingDraft) return;
-    draftStatus.value = "下書きを保存中…";
-    clearTimeout(draftTimer);
-    draftTimer = setTimeout(persist, 450);
-  },
-  { deep: true },
-);
 watch(modal, async (value) => {
   modalError.value = "";
   await nextTick();
@@ -564,6 +534,10 @@ function moveCharacter({ id, x }) {
   );
 }
 function openNode(mode = "scene") {
+  if (!tab.value) {
+    modal.value = "connect";
+    return;
+  }
   nodeForm.value = {
     mode,
     target: "new",
@@ -653,13 +627,16 @@ async function connect() {
       )
     )
       return;
-    await persist();
+    connected.value = false;
+    dataStatus.value = "スプレッドシートを再同期中…";
     const data = await request(endpoint.value.trim(), accessKey.value, "read");
     if (data.spreadsheetId !== SHEET_ID)
       throw new Error("指定のスプレッドシートと接続先が一致しません。");
     localStorage.setItem("scenario-api-url", endpoint.value.trim());
     sessionStorage.setItem("scenario-api-key", accessKey.value);
-    workbook.value = { ...data, demo: false, tabs: data.tabs.map(importTab) };
+    workbook.value = { ...data, tabs: data.tabs.map(importTab) };
+    connected.value = true;
+    dataStatus.value = "最新のスプレッドシートを読込済み";
     baseline.value = {};
     baselineSignatures.value = {};
     captureBaselines();
@@ -671,6 +648,7 @@ async function connect() {
     notify("スプレッドシートを読み込みました。");
     await loadSharedAssets();
   } catch (e) {
+    dataStatus.value = "スプレッドシート未読込";
     modalError.value = e.message;
   } finally {
     busy.value = false;
@@ -680,13 +658,16 @@ async function sync() {
   busy.value = true;
   modalError.value = "";
   try {
+    let mergedTabs = 0;
     for (const t of [...dirtyTabs.value]) {
       const saved = await request(endpoint.value, accessKey.value, "saveTab", {
         tabId: t.id,
         revision: t.revision,
+        baseRows: baseline.value[t.id]?.rows || [],
         rows: serialiseTab(t),
         sourceRows: t.rows.map((r) => r.sourceRow),
       });
+      if (saved.merged) mergedTabs++;
       const imported = importTab(saved),
         at = workbook.value.tabs.findIndex((x) => x.id === t.id);
       workbook.value.tabs[at] = imported;
@@ -695,16 +676,19 @@ async function sync() {
       if (t.id === tabId.value)
         selectedKey.value =
           sceneLines(imported, nodeName.value)[0]?.row.key || "";
-      await persist();
     }
     modal.value = "";
     undoStack.value = [];
     redoStack.value = [];
-    notify("変更をスプレッドシートに反映しました。");
+    notify(
+      mergedTabs
+        ? `他の編集を保持し、${mergedTabs} シートの変更部分を反映しました。`
+        : "変更をスプレッドシートに反映しました。",
+    );
   } catch (e) {
     modalError.value =
       e.code === "CONFLICT"
-        ? "シートが他の場所で変更されています。下書きをバックアップして、接続設定から再読込してください。"
+        ? e.message + " 再同期して内容を確認してください。"
         : e.message;
   } finally {
     busy.value = false;
@@ -997,13 +981,14 @@ async function importBackup(file) {
     }
     workbook.value = {
       ...data.workbook,
-      demo: true,
       tabs: data.workbook.tabs.map((t) => ({
         ...t,
         id: "local-" + uid(),
         revision: "",
       })),
     };
+    connected.value = false;
+    dataStatus.value = "ローカルバックアップ（未接続）";
     tabId.value = workbook.value.tabs[0].id;
     changeTab();
     notify("バックアップをローカル下書きとして開きました。");
@@ -1025,43 +1010,30 @@ function generateYarn() {
 function shortcut(e) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
     e.preventDefault();
-    persist();
-    notify("ブラウザーに下書きを保存しました。");
+    openSync();
   }
 }
 function beforeUnload(e) {
-  if (draftStatus.value === "下書きを保存中…") {
+  if (dirtyTabs.value.length) {
     e.preventDefault();
     e.returnValue = "";
   }
 }
 onMounted(async () => {
   try {
-    const saved =
-      (await loadDraft("sheet:" + SHEET_ID)) || (await loadDraft("demo"));
-    if (saved) {
-      workbook.value = saved.workbook;
-      baseline.value = saved.baseline;
-      baselineSignatures.value = saved.baselineSignatures;
-      tabId.value = saved.tabId;
-      nodeName.value = saved.node;
-      selectedKey.value = saved.key;
-    }
+    await clearDrafts();
     assets.value = (await readAssets())
       .filter((a) => a.sheetId === SHEET_ID)
       .map((a) => ({ ...a, url: URL.createObjectURL(a.blob) }));
-    draftStatus.value = "下書き保存済み";
+    dataStatus.value = "スプレッドシート未読込";
   } catch {
-    error.value = "このブラウザーでは下書きを保存できません。";
-  } finally {
-    loadingDraft = false;
+    error.value = "このブラウザーでは素材を読み込めません。";
   }
+  modal.value = "connect";
   window.addEventListener("keydown", shortcut);
   window.addEventListener("beforeunload", beforeUnload);
 });
 onBeforeUnmount(() => {
-  clearTimeout(draftTimer);
-  persist();
   assets.value.forEach((a) => URL.revokeObjectURL(a.url));
   window.removeEventListener("keydown", shortcut);
   window.removeEventListener("beforeunload", beforeUnload);
@@ -1279,9 +1251,15 @@ onBeforeUnmount(() => {
         />
         <div v-else class="empty-preview">
           <Clapperboard :size="32" />
-          <p>新しいシーンを作成して、書き始めましょう。</p>
+          <p>
+            {{
+              connected
+                ? "新しいシーンを作成して、書き始めましょう。"
+                : "スプレッドシートから最新の脚本を読み込んでください。"
+            }}
+          </p>
           <button class="button primary" @click="openNode()">
-            シーンを作成
+            {{ connected ? "シーンを作成" : "接続設定を開く" }}
           </button>
         </div>
         <div class="transport">
@@ -1930,7 +1908,7 @@ onBeforeUnmount(() => {
       </aside>
     </div>
     <footer class="statusbar">
-      <span>{{ draftStatus }}</span
+      <span>{{ dataStatus }}</span
       ><span>{{
         dirtyTabs.length
           ? dirtyTabs.length + " シートに未反映の変更"
@@ -2002,6 +1980,9 @@ onBeforeUnmount(() => {
           Apps Script の Web
           アプリと接続すると、脚本の読み込み・保存と素材の共有ができます。
         </p>
+        <p class="muted">
+          同時編集の取り違えを防ぐため、ページを開くたびに最新のスプレッドシートを再読込してください。
+        </p>
         <label
           >Web アプリ URL<input
             v-model="endpoint"
@@ -2069,6 +2050,9 @@ onBeforeUnmount(() => {
       </form>
       <div v-if="modal === 'sync'">
         <p>次のシートの A〜H 列を更新します。</p>
+        <p class="muted">
+          他の担当者が別のセルを変更していた場合は、その変更を残して編集部分だけを反映します。同じセルや行構成が変更されている場合は保存を停止します。
+        </p>
         <div v-for="t in dirtyTabs" :key="t.id" class="sync-item">
           <strong>{{ t.name }}</strong
           ><span>{{ pendingChanges(t, baseline[t.id]).cells }} セルの変更</span
