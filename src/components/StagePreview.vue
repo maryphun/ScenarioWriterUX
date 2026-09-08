@@ -18,6 +18,7 @@ const props = defineProps({
   before: Object,
   after: Object,
   row: Object,
+  instruction: Boolean,
   choices: Array,
   assets: Array,
   speakers: Array,
@@ -452,7 +453,7 @@ defineExpose({ play, stop });
     ></canvas>
     <div
       class="game-dialogue"
-      v-show="display.dialogue"
+      v-show="display.dialogue && !instruction"
       :style="{
         '--speaker-color': speaker?.color || '#f0f0f0',
         opacity: display.dialogueAlpha ?? 1,

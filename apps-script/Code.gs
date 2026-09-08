@@ -42,7 +42,7 @@ function initializeEditor() {
 }
 
 function doGet() {
-  return json_({ ok: true, service: "ScenarioWriterUX", version: 3 });
+  return json_({ ok: true, service: "ScenarioWriterUX", version: 4 });
 }
 function doPost(e) {
   try {
@@ -276,6 +276,16 @@ function hexColor_(hex) {
     blue: parseInt(hex.slice(5, 7), 16) / 255,
   };
 }
+function isInstructionRow_(row) {
+  const value = String((row && row[0]) || "").trim();
+  return (
+    value.indexOf("[") === 0 &&
+    value.lastIndexOf("]") === value.length - 1 &&
+    row.slice(1).every(function (cell) {
+      return !String(cell || "").trim();
+    })
+  );
+}
 function saveTab_(body) {
   const book = spreadsheet_(),
     sheet = book.getSheets().find((s) => s.getSheetId() === body.tabId);
@@ -308,39 +318,62 @@ function saveTab_(body) {
   const colors = Object.fromEntries(
     readSpeakers_(book).map((s) => [s.name, s.color]),
   );
-  const rows = body.rows.map((row, i) => ({
-    values: row.map((value, c) => {
-      const oldRow =
-        body.sourceRows[i] === null
-          ? null
-          : previous.cells[body.sourceRows[i] - 2];
-      const source = oldRow?.values?.[c];
-      const template = source || previous.cells[0]?.values?.[c] || {};
-      const cell = {
-        userEnteredValue: { stringValue: value },
-        userEnteredFormat: JSON.parse(
-          JSON.stringify(template.userEnteredFormat || {}),
-        ),
-        textFormatRuns: [],
-        note: source?.note || "",
-      };
-      if (template.dataValidation)
-        cell.dataValidation = template.dataValidation;
-      if (
-        source?.userEnteredValue?.stringValue === value &&
-        source.textFormatRuns
-      )
-        cell.textFormatRuns = source.textFormatRuns;
-      if (colors[row[2]]) {
-        delete cell.userEnteredFormat.backgroundColorStyle;
-        cell.userEnteredFormat.backgroundColor = hexColor_(colors[row[2]]);
-      } else if (!row[2]) {
-        delete cell.userEnteredFormat.backgroundColorStyle;
-        cell.userEnteredFormat.backgroundColor = { red: 1, green: 1, blue: 1 };
-      }
-      return cell;
-    }),
-  }));
+  const rows = body.rows.map((row, i) => {
+    const instruction = isInstructionRow_(row);
+    return {
+      values: row.map((value, c) => {
+        const oldRow =
+          body.sourceRows[i] === null
+            ? null
+            : previous.cells[body.sourceRows[i] - 2];
+        const source = oldRow?.values?.[c];
+        const template = source || previous.cells[0]?.values?.[c] || {};
+        const cell = {
+          userEnteredValue: { stringValue: value },
+          userEnteredFormat: JSON.parse(
+            JSON.stringify(template.userEnteredFormat || {}),
+          ),
+          textFormatRuns: [],
+          note: source?.note || "",
+        };
+        if (template.dataValidation)
+          cell.dataValidation = template.dataValidation;
+        if (
+          source?.userEnteredValue?.stringValue === value &&
+          source.textFormatRuns
+        )
+          cell.textFormatRuns = source.textFormatRuns;
+        if (instruction) {
+          delete cell.userEnteredFormat.backgroundColorStyle;
+          cell.userEnteredFormat.backgroundColor = {
+            red: 0,
+            green: 0,
+            blue: 0,
+          };
+          cell.userEnteredFormat.textFormat = Object.assign(
+            {},
+            cell.userEnteredFormat.textFormat || {},
+            {
+              bold: true,
+              foregroundColor: { red: 1, green: 1, blue: 1 },
+            },
+          );
+          delete cell.userEnteredFormat.textFormat.foregroundColorStyle;
+        } else if (colors[row[2]]) {
+          delete cell.userEnteredFormat.backgroundColorStyle;
+          cell.userEnteredFormat.backgroundColor = hexColor_(colors[row[2]]);
+        } else if (!row[2]) {
+          delete cell.userEnteredFormat.backgroundColorStyle;
+          cell.userEnteredFormat.backgroundColor = {
+            red: 1,
+            green: 1,
+            blue: 1,
+          };
+        }
+        return cell;
+      }),
+    };
+  });
   // One atomic Sheets batch: explicit string values prevent formula injection.
   const requests = [];
   const required = Math.max(body.rows.length, previous.rows.length) + 1;

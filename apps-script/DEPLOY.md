@@ -20,6 +20,7 @@ When updating the backend, use **Deploy → Manage deployments → Edit → New 
 - Save requests compare a content-and-format revision, acquire a script lock, retain a private JSON backup, and submit a single Sheets batch for that tab. A stale revision is rejected. Human edits made directly in Sheets are not locked by Apps Script; avoid editing the same tab directly during a save.
 - Revision payloads are canonicalized before hashing because the Sheets API does not guarantee JSON object property order. This prevents unchanged cell formatting from causing false conflict errors.
 - Existing cell formats, validation and notes follow source rows. Column I onward and the header row are outside the write range. Formulas in script columns cause a refusal to save, rather than being converted to text.
+- A row containing only bracketed text in column A is formatted black across A:H with bold white text. These production-instruction rows remain ordinary string values and are ignored by the editor's node and Yarn logic.
 - All new cell values are explicit strings, so text starting with `=` remains text.
 - Assets are private Drive files returned only through authenticated API requests. Anyone with the editor key can read/write this workbook and its asset library. Rotate `EDITOR_ACCESS_KEY` in Script properties if team access changes.
 - Deleting a shared asset removes it from the shared index and moves its Drive file to Trash. Restoring the file from Drive Trash does not automatically add it back to the shared index.

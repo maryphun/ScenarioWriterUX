@@ -34,6 +34,32 @@ export function makeRow(node = "", speaker = "") {
     comment: "",
   };
 }
+export function formatInstruction(text = "") {
+  let value = String(text);
+  const trimmed = value.trim();
+  if (trimmed.startsWith("[") && trimmed.endsWith("]"))
+    value = trimmed.slice(1, -1);
+  return `[${value}]`;
+}
+export function makeInstructionRow(text = "") {
+  const row = makeRow();
+  row.node = formatInstruction(text);
+  row.lineId = "";
+  return row;
+}
+export function isInstructionRow(row) {
+  const value = String(row?.node || "").trim();
+  return (
+    value.startsWith("[") &&
+    value.endsWith("]") &&
+    KEYS.slice(1).every((key) => !String(row?.[key] || "").trim())
+  );
+}
+export function instructionText(row) {
+  if (!isInstructionRow(row)) return "";
+  const value = String(row.node).trim();
+  return value.slice(1, -1);
+}
 export function importTab(tab) {
   return {
     id: tab.id,
@@ -53,7 +79,7 @@ export const populated = (row) =>
 export function sceneEntries(tab) {
   let scene = "";
   return (tab?.rows || []).map((row, index) => {
-    if (row.node.trim()) scene = row.node.trim();
+    if (!isInstructionRow(row) && row.node.trim()) scene = row.node.trim();
     return { row, index, scene };
   });
 }
@@ -61,7 +87,7 @@ export function sceneNames(tab) {
   return [
     ...new Set(
       sceneEntries(tab)
-        .filter((e) => populated(e.row))
+        .filter((e) => populated(e.row) && !isInstructionRow(e.row))
         .map((e) => e.scene),
     ),
   ];
@@ -78,8 +104,11 @@ export function removeScriptRow(tab, key) {
     lineIndex = sceneLines(tab, scene).findIndex(
       (entry) => entry.row.key === key,
     ),
-    successor = entries.slice(at + 1).find((entry) => populated(entry.row));
+    successor = entries
+      .slice(at + 1)
+      .find((entry) => populated(entry.row) && !isInstructionRow(entry.row));
   if (
+    !isInstructionRow(entries[at].row) &&
     entries[at].row.node.trim() &&
     successor?.scene === scene &&
     !successor.row.node.trim()
@@ -103,7 +132,9 @@ export function removeScriptRow(tab, key) {
 export function serialiseTab(tab) {
   return sceneEntries(tab).map(({ row, scene }) =>
     KEYS.map((key) =>
-      key === "node" && populated(row) ? scene : String(row[key] || ""),
+      key === "node" && populated(row) && !isInstructionRow(row)
+        ? scene
+        : String(row[key] || ""),
     ),
   );
 }
@@ -131,7 +162,8 @@ export function renameNode(workbook, tabId, oldName, newName) {
   if (issue) throw new Error(issue);
   const tab = workbook.tabs.find((t) => t.id === tabId);
   const entries = sceneEntries(tab).filter(
-    (e) => e.scene === oldName && populated(e.row),
+    (e) =>
+      e.scene === oldName && populated(e.row) && !isInstructionRow(e.row),
   );
   if (!entries.length) throw new Error("変更するシーンが見つかりません。");
   const targets = new Set([oldName]);
@@ -154,7 +186,8 @@ export function pendingChanges(tab, baseline) {
     row.forEach((value, c) => {
       if (value !== String(oldRows[i]?.[c] ?? "")) {
         cells++;
-        if (!c && value && !oldRows[i]?.[c]) assignedNodes++;
+        if (!c && value && !oldRows[i]?.[c] && !isInstructionRow(tab.rows[i]))
+          assignedNodes++;
       }
     }),
   );
@@ -180,6 +213,7 @@ export function workbookIssues(workbook) {
   for (const tab of workbook.tabs)
     for (const { row, scene } of sceneEntries(tab)) {
       if (!populated(row)) continue;
+      if (isInstructionRow(row)) continue;
       if (!scene) result.push(`${tab.name}: ノード未設定の行があります。`);
       if (scene && !/^[\p{L}_][\p{L}\p{N}_]*$/u.test(scene))
         result.push(
@@ -257,6 +291,7 @@ export function exportYarn(workbook, parseCommands) {
           .map((name) => {
             const output = [`title: ${name}`, "---"];
             for (const { row } of sceneLines(tab, name)) {
+              if (isInstructionRow(row)) continue;
               for (const command of parseCommands(row.command))
                 output.push(yarnCommand(command.raw));
               const tag = row.lineId ? ` #line:${row.lineId}` : "";

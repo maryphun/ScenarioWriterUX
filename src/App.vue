@@ -51,6 +51,10 @@ import {
   KEYS,
   uid,
   makeRow,
+  makeInstructionRow,
+  isInstructionRow,
+  instructionText,
+  formatInstruction,
   importTab,
   sceneLines,
   sceneNames,
@@ -101,6 +105,7 @@ const panel = ref("background"),
   modal = ref(""),
   modalError = ref(""),
   textInput = ref(),
+  instructionInput = ref(),
   fileInput = ref(),
   backupInput = ref(),
   uploadKind = ref("background");
@@ -130,6 +135,7 @@ const index = computed(() =>
   ),
 );
 const current = computed(() => lines.value[index.value]?.row);
+const currentIsInstruction = computed(() => isInstructionRow(current.value));
 const isChoice = computed(() =>
   Boolean(current.value?.choice || current.value?.nextNode),
 );
@@ -339,6 +345,24 @@ function insertLine() {
   selectedKey.value = row.key;
   nextTick(() => textInput.value?.focus());
 }
+function insertInstruction() {
+  if (!nodeName.value) {
+    openNode("rename");
+    return;
+  }
+  checkpoint();
+  const row = makeInstructionRow();
+  const at = current.value
+    ? tab.value.rows.findIndex((item) => item.key === current.value.key) + 1
+    : tab.value.rows.length;
+  tab.value.rows.splice(at, 0, row);
+  selectedKey.value = row.key;
+  nextTick(() => instructionInput.value?.focus());
+}
+function editInstruction(value) {
+  if (!currentIsInstruction.value) return;
+  current.value.node = formatInstruction(value);
+}
 function editField(field, value) {
   if (!current.value) return;
   current.value[field] = value;
@@ -363,16 +387,23 @@ function onEnter(event) {
 }
 function deleteLine(target = current.value) {
   if (!target?.key) return;
+  const instruction = isInstructionRow(target);
   const content = (
     target.choice ||
     target.text ||
     target.command ||
+    (instruction ? target.node : "") ||
     "内容のない行"
   )
     .replace(/\s+/g, " ")
     .trim();
   const summary = content.length > 56 ? content.slice(0, 56) + "…" : content;
-  if (!confirm(`このセリフを削除しますか？\n「${summary}」`)) return;
+  if (
+    !confirm(
+      `${instruction ? "この制作指示" : "このセリフ"}を削除しますか？\n「${summary}」`,
+    )
+  )
+    return;
   const wasSelected = target.key === current.value?.key;
   checkpoint();
   const selection = removeScriptRow(tab.value, target.key);
@@ -393,7 +424,7 @@ function reorderLine(event, target) {
   if (from < 0 || to < 0) return;
   checkpoint();
   const [row] = tab.value.rows.splice(from, 1);
-  row.node = nodeName.value;
+  if (!isInstructionRow(row)) row.node = nodeName.value;
   tab.value.rows.splice(to, 0, row);
 }
 function setCommand(raw, at = -1) {
@@ -1097,7 +1128,10 @@ onBeforeUnmount(() => {
             v-for="(entry, i) in lines"
             :key="entry.row.key"
             class="script-row"
-            :class="{ selected: entry.row.key === current?.key }"
+            :class="{
+              selected: entry.row.key === current?.key,
+              instruction: isInstructionRow(entry.row),
+            }"
             @dragover.prevent
             @drop="reorderLine($event, entry)"
           >
@@ -1117,7 +1151,13 @@ onBeforeUnmount(() => {
               <span class="line-number">{{
                 String(i + 1).padStart(2, "0")
               }}</span>
-              <div class="line-copy">
+              <div
+                v-if="isInstructionRow(entry.row)"
+                class="line-copy instruction-copy"
+              >
+                <span class="line-instruction">{{ entry.row.node }}</span>
+              </div>
+              <div v-else class="line-copy">
                 <span
                   class="line-speaker"
                   :style="{
@@ -1144,8 +1184,16 @@ onBeforeUnmount(() => {
             <button
               class="line-delete"
               type="button"
-              :aria-label="`${i + 1}行目を削除`"
-              title="このセリフを削除"
+              :aria-label="
+                isInstructionRow(entry.row)
+                  ? `${i + 1}行目の制作指示を削除`
+                  : `${i + 1}行目を削除`
+              "
+              :title="
+                isInstructionRow(entry.row)
+                  ? 'この制作指示を削除'
+                  : 'このセリフを削除'
+              "
               @click.stop="deleteLine(entry.row)"
             >
               <Trash2 :size="14" />
@@ -1158,6 +1206,12 @@ onBeforeUnmount(() => {
             @click="current ? insertLine() : openNode()"
           >
             <Plus :size="15" />セリフを追加
+          </button>
+          <button
+            class="button full instruction-add"
+            @click="current ? insertInstruction() : openNode()"
+          >
+            <FileText :size="15" />制作指示を追加
           </button>
         </div>
       </aside>
@@ -1175,6 +1229,7 @@ onBeforeUnmount(() => {
           :before="before"
           :after="after"
           :row="current"
+          :instruction="currentIsInstruction"
           :choices="choices"
           :assets="assets"
           :speakers="workbook.speakers"
@@ -1209,8 +1264,38 @@ onBeforeUnmount(() => {
             次へ<ArrowRight :size="16" />
           </button>
         </div>
+        <section v-if="currentIsInstruction" class="instruction-editor">
+          <div class="instruction-toolbar">
+            <strong><FileText :size="16" />制作指示</strong>
+            <button
+              class="icon-button"
+              title="この制作指示を削除"
+              aria-label="この制作指示を削除"
+              @click="deleteLine(current)"
+            >
+              <Trash2 :size="14" />
+            </button>
+          </div>
+          <div class="instruction-field">
+            <span aria-hidden="true">[</span>
+            <textarea
+              ref="instructionInput"
+              :value="instructionText(current)"
+              aria-label="制作指示"
+              placeholder="ここに制作指示を入力"
+              @focus="textFocus"
+              @blur="focusCheckpoint = false"
+              @input="editInstruction($event.target.value)"
+            ></textarea>
+            <span aria-hidden="true">]</span>
+          </div>
+          <p>
+            スプレッドシートでは黒い行として保存され、Yarn
+            スクリプトには出力されません。
+          </p>
+        </section>
         <section
-          v-if="current"
+          v-else-if="current"
           class="dialogue-editor"
           :style="{ '--line-color': speakerColor }"
         >
@@ -1284,7 +1369,7 @@ onBeforeUnmount(() => {
             >
           </div>
         </section>
-        <section v-if="current" class="line-direction">
+        <section v-if="current && !currentIsInstruction" class="line-direction">
           <div class="panel-heading">
             <h2>この行の演出</h2>
             <button class="text-button" @click="openNode('choice')">
@@ -1365,7 +1450,11 @@ onBeforeUnmount(() => {
       </main>
 
       <aside class="inspector">
-        <nav class="inspector-tabs" aria-label="演出の種類">
+        <nav
+          v-if="!currentIsInstruction"
+          class="inspector-tabs"
+          aria-label="演出の種類"
+        >
           <button
             v-for="p in [
               { id: 'background', label: '背景', icon: ImagePlus },
@@ -1380,7 +1469,14 @@ onBeforeUnmount(() => {
             <component :is="p.icon" :size="17" /><span>{{ p.label }}</span>
           </button>
         </nav>
-        <div class="inspector-body">
+        <div v-if="currentIsInstruction" class="instruction-inspector">
+          <FileText :size="22" />
+          <h2>制作指示の行</h2>
+          <p>
+            この行は制作メモ専用です。背景・立ち絵・演出コマンドは設定されません。
+          </p>
+        </div>
+        <div v-else class="inspector-body">
           <section v-if="panel === 'background'">
             <div class="panel-heading"><h2>背景</h2></div>
             <button

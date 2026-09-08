@@ -5,6 +5,9 @@ import {
   sceneLines,
   serialiseTab,
   makeRow,
+  makeInstructionRow,
+  isInstructionRow,
+  instructionText,
   sampleWorkbook,
   validateNodeName,
   findNode,
@@ -38,6 +41,34 @@ test("line creation uses distinct stable IDs and repeats its scene node", () => 
   assert.notEqual(a.lineId, b.lineId);
   assert.equal(a.node, "Start");
   assert.equal(a.sourceRow, null);
+});
+test("instruction rows remain in their scene but never become nodes or Yarn", () => {
+  const tab = importTab({
+    id: 1,
+    name: "Story",
+    rows: [
+      ["Start", "", "A", "Before"],
+      ["[ここで戦闘を挿入]", "", "", "", "", "", "", ""],
+      ["", "", "A", "After"],
+    ],
+  });
+  const instruction = tab.rows[1];
+  assert.equal(isInstructionRow(instruction), true);
+  assert.equal(instructionText(instruction), "ここで戦闘を挿入");
+  assert.equal(sceneLines(tab, "Start").length, 3);
+  assert.equal(serialiseTab(tab)[1][0], "[ここで戦闘を挿入]");
+  const yarn = exportYarn(
+    { tabs: [tab], speakers: [] },
+    parseCommands,
+  );
+  assert.match(yarn, /Before/);
+  assert.match(yarn, /After/);
+  assert.doesNotMatch(yarn, /戦闘を挿入/);
+
+  const created = makeInstructionRow("[背景資料を確認]");
+  assert.equal(created.node, "[背景資料を確認]");
+  assert.equal(created.lineId, "");
+  assert.equal(isInstructionRow(created), true);
 });
 test("choice rows form groups; existing and new node names are checked", () => {
   const w = sampleWorkbook(),

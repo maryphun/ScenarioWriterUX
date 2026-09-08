@@ -98,11 +98,11 @@ test("all data actions require the key before reading a workbook or Drive", () =
     const result = c.doPost({
       postData: { contents: JSON.stringify({ action, key: "wrong" }) },
     });
-    assert.equal(result.ok, false);
+  assert.equal(result.ok, false);
     assert.equal(result.error.code, "UNAUTHORIZED");
   }
   assert.equal(c.doGet().ok, true);
-  assert.equal(c.doGet().version, 3);
+  assert.equal(c.doGet().version, 4);
 });
 test("revision serialization ignores object property insertion order", () => {
   const { context: c } = backend();
@@ -156,6 +156,27 @@ test("saving backs up first, writes literal strings, and preserves source metada
   assert.equal(first.note, "Keep this note");
   assert.equal(first.userEnteredFormat.textFormat.bold, true);
   assert.equal(first.dataValidation.strict, true);
+});
+test("instruction rows are black across A:H with bold white text", () => {
+  const { context: c, body, batches } = writableBackend();
+  body.rows = [["[ここで戦闘を挿入]", "", "", "", "", "", "", ""]];
+  body.sourceRows = [null];
+  c.saveTab_(body);
+  const cells = batches[0][0].requests[0].updateCells.rows[0].values;
+  assert.equal(cells[0].userEnteredValue.stringValue, "[ここで戦闘を挿入]");
+  for (const cell of cells) {
+    assert.deepEqual(cell.userEnteredFormat.backgroundColor, {
+      red: 0,
+      green: 0,
+      blue: 0,
+    });
+    assert.equal(cell.userEnteredFormat.textFormat.bold, true);
+    assert.deepEqual(cell.userEnteredFormat.textFormat.foregroundColor, {
+      red: 1,
+      green: 1,
+      blue: 1,
+    });
+  }
 });
 test("formulas and forged or duplicate source references are rejected without writes", () => {
   const { context: c, body, previous, batches } = writableBackend();

@@ -25,6 +25,7 @@ npm run build
 
 - Pick a spreadsheet tab and node. Click a line to reconstruct its scene.
 - Choose a speaker, type, and press Enter for the next line. Shift+Enter inserts a newline. Japanese IME confirmation is protected.
+- Use “制作指示を追加” to place a non-gameplay instruction between dialogue lines. The editor keeps the brackets visible, shows the instruction as a black row, and excludes it from Yarn export.
 - Drop images into the background or sprite section. A background has instant/fade mode, duration, and fade color (black by default).
 - Add any number of character IDs. Each ID has its own image, position, scale, flip, tint, and visibility. Reusing an ID updates that character. Drag a character in the preview or use the position control. A named dialogue line automatically keeps the matching character ID in focus and slightly grays the other visible characters; narration leaves everyone at their normal color. Character IDs should therefore exactly match the speaker names in `Master`.
 - Commands can be inserted using forms or dragged from the palette, reordered, edited, and removed. The raw command field preserves unsupported/legacy text.
@@ -37,6 +38,7 @@ npm run build
 ## Compatibility and boundaries
 
 - The eight existing columns are preserved. Empty node cells are interpreted as continuation in the editor, then filled for meaningful rows when a changed tab is saved, matching the Unity converter's requirement. Blank separator rows remain. The review shows how many node names will be filled.
+- A row containing only bracketed text in column A is a production instruction. It belongs visually to the surrounding scene but is never treated as a node. The backend formats A:H black with bold white text, and the Yarn exporter omits the row.
 - Imported leading `*` node names are not silently renamed. Legacy destinations can be previewed when unambiguous; invalid/missing/exact-name mismatches must be resolved before Yarn export.
 - The renderer implements the provided command families and aliases. Its default preview uses a 1.1 stage-height sprite and a -175 px bottom offset at 1080p; both values remain adjustable. Missing images remain labeled placeholders.
 - The preview approximates the Unity canvas and UI; it does not execute arbitrary Yarn instructions, gameplay code, battle transitions or other custom commands. Unsupported commands are retained and identified. Backgrounds stretch to the stage like the current Unity background controller. Native text layout/fonts and engine rendering can still differ.
