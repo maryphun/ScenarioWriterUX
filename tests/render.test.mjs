@@ -30,6 +30,9 @@ test("Vue editor and existing command forms render with their saved values", asy
     const { default: App } = await server.ssrLoadModule("/src/App.vue");
     const html = await renderToString(createSSRApp(App));
     assert.match(html, /プレビュー/);
+    assert.match(html, /40%表示/);
+    assert.match(html, /ノード名変更/);
+    assert.doesNotMatch(html, />名前変更</);
     assert.match(html, /フェード時間|フェード色/);
     assert.match(html, /スプレッドシートから最新の脚本を読み込んでください/);
     assert.match(html, /接続設定を開く/);

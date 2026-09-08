@@ -316,12 +316,29 @@ fieldset {
   padding: 3px 17px 12px;
   border-bottom: 1px solid var(--line);
 }
-.node-picker select {
+.scene-selector-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 12px 0 7px;
+}
+.scene-selector-heading label {
+  margin: 0;
+}
+.scene-selector select {
+  width: 100%;
   font-size: 13px;
+}
+.node-rename-button {
+  min-height: 29px;
+  padding: 4px 9px;
+  font-size: 11px;
 }
 .node-meta {
   @apply flex justify-between items-center;
   gap: 8px;
+  margin-top: 7px;
 }
 .script-lines {
   overflow-y: auto;
@@ -460,6 +477,26 @@ fieldset {
 .panel-heading h1 {
   font-weight: 500;
   color: var(--muted);
+}
+.preview-heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.preview-size-button {
+  min-height: 30px;
+  padding: 5px 9px;
+  font-size: 11px;
+}
+.preview-stage {
+  width: 100%;
+  transition: width 0.18s ease;
+}
+.preview-stage.compact {
+  width: 40%;
+  margin-inline: auto;
 }
 .game-view {
   position: relative;
@@ -1398,7 +1435,7 @@ fieldset {
     align-items: center;
     gap: 15px;
   }
-  .node-picker > label {
+  .node-picker > .scene-selector {
     flex: 1;
     min-width: 0;
   }

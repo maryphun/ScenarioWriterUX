@@ -29,6 +29,7 @@ import {
   Check,
   FileText,
   EyeOff,
+  Minimize2,
   Maximize2,
 } from "lucide-vue-next";
 import StagePreview from "./components/StagePreview.vue";
@@ -177,6 +178,7 @@ const backgroundForm = ref({
   time: 0.5,
   color: "black",
 });
+const compactPreview = ref(false);
 const bgAssets = computed(() =>
   assets.value.filter((a) => a.kind === "background"),
 );
@@ -1107,22 +1109,31 @@ onBeforeUnmount(() => {
     <div class="editor-layout">
       <aside class="script-panel">
         <div class="node-picker">
-          <label
-            >シーン<select v-model="nodeName" @change="selectScene">
+          <div class="scene-selector">
+            <div class="scene-selector-heading">
+              <label for="scene-selector">シーン</label>
+              <button
+                type="button"
+                class="button node-rename-button"
+                :disabled="!current"
+                @click="openNode('rename')"
+              >
+                ノード名変更
+              </button>
+            </div>
+            <select
+              id="scene-selector"
+              v-model="nodeName"
+              @change="selectScene"
+            >
               <option v-for="name in names" :key="name" :value="name">
                 {{ name || "未整理の行" }}
               </option>
-            </select></label
-          >
+            </select>
+          </div>
           <div class="node-meta">
-            <small>{{ lines.length }} 行</small
-            ><button
-              class="text-button"
-              :disabled="!current"
-              @click="openNode('rename')"
-            >
-              名前変更</button
-            ><button
+            <small>{{ lines.length }} 行</small>
+            <button
               class="text-button"
               :disabled="!navigation.length"
               @click="returnNode"
@@ -1227,41 +1238,57 @@ onBeforeUnmount(() => {
       <main class="preview-panel">
         <div class="panel-heading">
           <h1>プレビュー</h1>
-          <span class="meta"
-            >{{ nodeName || "シーン未選択" }} <span class="separator">·</span>
-            {{ index + 1 }} / {{ lines.length }}</span
-          >
+          <div class="preview-heading-actions">
+            <span class="meta"
+              >{{ nodeName || "シーン未選択" }}
+              <span class="separator">·</span> {{ index + 1 }} /
+              {{ lines.length }}</span
+            >
+            <button
+              type="button"
+              class="button preview-size-button"
+              :aria-pressed="compactPreview"
+              :title="compactPreview ? '通常サイズに戻す' : '40%サイズで表示'"
+              @click="compactPreview = !compactPreview"
+            >
+              <Maximize2 v-if="compactPreview" :size="14" />
+              <Minimize2 v-else :size="14" />
+              {{ compactPreview ? "通常サイズ" : "40%表示" }}
+            </button>
+          </div>
         </div>
-        <StagePreview
-          v-if="current"
-          :before="before"
-          :after="after"
-          :row="current"
-          :instruction="currentIsInstruction"
-          :choices="choices"
-          :assets="assets"
-          :speakers="workbook.speakers"
-          :options="previewOptions"
-          @choice="followChoice"
-          @move-character="moveCharacter"
-          @select-character="
-            selectedCharacter = $event;
-            panel = 'characters';
-          "
-          @message="notify"
-        />
-        <div v-else class="empty-preview">
-          <Clapperboard :size="32" />
-          <p>
-            {{
-              connected
-                ? "新しいシーンを作成して、書き始めましょう。"
-                : "スプレッドシートから最新の脚本を読み込んでください。"
-            }}
-          </p>
-          <button class="button primary" @click="openNode()">
-            {{ connected ? "シーンを作成" : "接続設定を開く" }}
-          </button>
+        <div class="preview-stage" :class="{ compact: compactPreview }">
+          <StagePreview
+            v-if="current"
+            :before="before"
+            :after="after"
+            :row="current"
+            :instruction="currentIsInstruction"
+            :choices="choices"
+            :assets="assets"
+            :speakers="workbook.speakers"
+            :options="previewOptions"
+            @choice="followChoice"
+            @move-character="moveCharacter"
+            @select-character="
+              selectedCharacter = $event;
+              panel = 'characters';
+            "
+            @message="notify"
+          />
+          <div v-else class="empty-preview">
+            <Clapperboard :size="32" />
+            <p>
+              {{
+                connected
+                  ? "新しいシーンを作成して、書き始めましょう。"
+                  : "スプレッドシートから最新の脚本を読み込んでください。"
+              }}
+            </p>
+            <button class="button primary" @click="openNode()">
+              {{ connected ? "シーンを作成" : "接続設定を開く" }}
+            </button>
+          </div>
         </div>
         <div class="transport">
           <button
