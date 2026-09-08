@@ -902,8 +902,40 @@ fieldset {
   padding-bottom: 15px;
   margin-bottom: 20px;
 }
-.selected-character .text-button {
-  margin-top: 9px;
+.character-removal-group {
+  margin-top: 17px;
+  padding: 13px;
+  background: color-mix(in srgb, var(--field) 72%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.character-removal-group > h3 {
+  padding-bottom: 10px;
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+}
+.character-removal-group .character-transition {
+  margin: 13px 0 10px;
+}
+.character-removal-group > label {
+  margin: 10px 0 0;
+}
+.character-hide-action {
+  display: flex;
+  justify-content: center;
+  padding-top: 15px;
+}
+.character-hide-button {
+  min-width: 174px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 6%, var(--surface-raised));
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  font-weight: 600;
+}
+.character-hide-button:hover:not(:disabled) {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 13%, var(--surface-raised));
+  border-color: color-mix(in srgb, var(--danger) 65%, var(--line));
 }
 .section-subtitle {
   margin: 21px 0 13px;

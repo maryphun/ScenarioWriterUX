@@ -28,6 +28,7 @@ import {
   Cloud,
   Check,
   FileText,
+  EyeOff,
   Maximize2,
 } from "lucide-vue-next";
 import StagePreview from "./components/StagePreview.vue";
@@ -1667,37 +1668,43 @@ onBeforeUnmount(() => {
                   色
                 </button>
               </div>
-              <fieldset class="transition-fields character-transition">
-                <legend>非表示の切り替え</legend>
-                <div class="segmented">
+              <div class="character-removal-group">
+                <h3>非表示の設定</h3>
+                <fieldset class="transition-fields character-transition">
+                  <legend>切り替え</legend>
+                  <div class="segmented">
+                    <button
+                      type="button"
+                      :class="{ active: hideCharacterForm.mode === 'instant' }"
+                      @click="hideCharacterForm.mode = 'instant'"
+                    >
+                      即時</button
+                    ><button
+                      type="button"
+                      :class="{ active: hideCharacterForm.mode === 'fade' }"
+                      @click="hideCharacterForm.mode = 'fade'"
+                    >
+                      フェード
+                    </button>
+                  </div>
+                </fieldset>
+                <label v-if="hideCharacterForm.mode === 'fade'"
+                  >フェード時間（秒）<input
+                    v-model.number="hideCharacterForm.time"
+                    type="number"
+                    min="0"
+                    step="0.1" /></label
+                >
+                <div class="character-hide-action">
                   <button
                     type="button"
-                    :class="{ active: hideCharacterForm.mode === 'instant' }"
-                    @click="hideCharacterForm.mode = 'instant'"
+                    class="button character-hide-button"
+                    @click="hideCharacter"
                   >
-                    即時</button
-                  ><button
-                    type="button"
-                    :class="{ active: hideCharacterForm.mode === 'fade' }"
-                    @click="hideCharacterForm.mode = 'fade'"
-                  >
-                    フェード
+                    <EyeOff :size="15" />この行から非表示
                   </button>
                 </div>
-              </fieldset>
-              <label v-if="hideCharacterForm.mode === 'fade'"
-                >フェード時間（秒）<input
-                  v-model.number="hideCharacterForm.time"
-                  type="number"
-                  min="0"
-                  step="0.1" /></label
-              >
-              <button
-                class="text-button danger"
-                @click="hideCharacter"
-              >
-                この行から非表示
-              </button>
+              </div>
             </div>
             <h3 class="section-subtitle">立ち絵を追加</h3>
             <button
