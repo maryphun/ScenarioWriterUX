@@ -42,6 +42,9 @@ import {
   emptyStage,
   validateValues,
   COLOR_NAMES,
+  TOKA_DEFAULT_BODY_ASSET,
+  isTokaCharacter,
+  isTokaFaceAsset,
 } from "./lib/commands.js";
 import {
   DEFAULT_CHARACTER_TRANSITION,
@@ -184,6 +187,10 @@ const spriteAssets = computed(() =>
 const backgroundAsset = computed(() =>
   assets.value.find((a) => a.name === backgroundForm.value.asset),
 );
+const assetUrl = (name) =>
+  assets.value.find(
+    (a) => a.name.toLowerCase() === String(name || "").toLowerCase(),
+  )?.url || "";
 const character = computed(() =>
   after.value.characters.find((c) => c.id === selectedCharacter.value),
 );
@@ -1582,11 +1589,16 @@ onBeforeUnmount(() => {
                 :class="{ active: selectedCharacter === c.id }"
                 @click="selectedCharacter = c.id"
               >
-                <img
-                  v-if="assets.find((a) => a.name === c.asset)"
-                  :src="assets.find((a) => a.name === c.asset).url"
-                  alt=""
-                /><Users v-else :size="18" /><span
+                <div
+                  v-if="c.layered && (assetUrl(c.bodyAsset) || assetUrl(c.faceAsset))"
+                  class="character-thumb layered"
+                  aria-hidden="true"
+                >
+                  <img v-if="assetUrl(c.bodyAsset)" :src="assetUrl(c.bodyAsset)" alt="" />
+                  <img v-if="assetUrl(c.faceAsset)" :src="assetUrl(c.faceAsset)" alt="" />
+                </div>
+                <img v-else-if="assetUrl(c.asset)" :src="assetUrl(c.asset)" alt="" />
+                <Users v-else :size="18" /><span
                   >{{ c.id }}<small>{{ c.asset }}</small></span
                 >
               </button>
@@ -1595,6 +1607,11 @@ onBeforeUnmount(() => {
               </p>
             </div>
             <div v-if="character" class="selected-character">
+              <small v-if="character.layered" class="toka-layer-note">
+                桃香の既定衣装（{{ character.bodyAsset }}）に「{{
+                  character.faceAsset
+                }}」を重ねて表示しています。
+              </small>
               <label
                 >横位置
                 <div class="number-control">
@@ -1725,6 +1742,14 @@ onBeforeUnmount(() => {
                   {{ a.name }}
                 </option>
               </select></label
+            ><small
+              v-if="isTokaCharacter(characterForm.id) && isTokaFaceAsset(characterForm.asset)"
+              class="inspector-note toka-layer-note"
+              >桃香の既定衣装（{{ TOKA_DEFAULT_BODY_ASSET }}）に、この表情を重ねます。</small
+            ><small
+              v-else-if="isTokaCharacter(characterForm.id) && characterForm.asset"
+              class="inspector-note"
+              >この画像を単体で表示します。桃香の衣装プリセットは使いません。</small
             ><label
               >横位置
               <div class="number-control">

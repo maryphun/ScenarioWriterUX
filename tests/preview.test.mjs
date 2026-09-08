@@ -20,6 +20,8 @@ test("named dialogue dims every visible character except the matching ID", () =>
   assert.equal(isNonSpeakingCharacter("白崎桃香", "白崎桃香"), false);
   assert.equal(isNonSpeakingCharacter("奥殿テトラ", "白崎桃香"), true);
   assert.equal(isNonSpeakingCharacter("momoka", "MOMOKA"), false);
+  assert.equal(isNonSpeakingCharacter("momoka", "白崎桃香"), false);
+  assert.equal(isNonSpeakingCharacter("toka", "白崎桃香"), false);
   assert.equal(isNonSpeakingCharacter("momoka", ""), false);
   assert.match(NON_SPEAKER_FILTER, /grayscale/);
 });

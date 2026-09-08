@@ -7,6 +7,7 @@ import {
   validateValues,
   stateAt,
   emptyStage,
+  TOKA_DEFAULT_BODY_ASSET,
 } from "../src/lib/commands.js";
 
 test("all supplied command families round-trip, including aliases and optional defaults", () => {
@@ -91,6 +92,34 @@ test("show updates an existing character and clear removes all", () => {
   );
   rows.push({ command: "[char:clear:.5]" });
   assert.equal(stateAt(rows, 1).characters.length, 0);
+});
+test("Toka face assets use the default body while explicit sprites stay single-layered", () => {
+  const rows = [
+    {
+      command:
+        "[char:show:toka:Ch_Toka_Face_default:0.5:instant:false]",
+    },
+    { command: "[char:face:toka:Ch_Toka_Face_angry:instant]" },
+  ];
+
+  const layered = stateAt(rows, 1).characters[0];
+  assert.equal(layered.layered, true);
+  assert.equal(layered.bodyAsset, TOKA_DEFAULT_BODY_ASSET);
+  assert.equal(layered.faceAsset, "Ch_Toka_Face_angry");
+  assert.equal(layered.asset, "Ch_Toka_Face_angry");
+
+  rows.push({ command: "[char:face:toka:Ch_Toka_TF_angry:instant]" });
+  const explicit = stateAt(rows, 2).characters[0];
+  assert.equal(explicit.layered, false);
+  assert.equal(explicit.bodyAsset, "");
+  assert.equal(explicit.faceAsset, "");
+  assert.equal(explicit.asset, "Ch_Toka_TF_angry");
+
+  const unrelated = stateAt(
+    [{ command: "[char:show:stand_in:Ch_Toka_Face_default]" }],
+    0,
+  ).characters[0];
+  assert.equal(unrelated.layered, false);
 });
 test("fade, dialogue and audio states persist through branches without mutating initial state", () => {
   const initial = emptyStage();

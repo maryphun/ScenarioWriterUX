@@ -48,7 +48,9 @@ const speaker = computed(() =>
 const missing = computed(() =>
   [
     display.value.background,
-    ...display.value.characters.map((c) => c.asset),
+    ...display.value.characters.flatMap((c) =>
+      c.layered ? [c.bodyAsset, c.faceAsset] : [c.asset],
+    ),
   ].filter(
     (name) =>
       name &&
@@ -58,6 +60,17 @@ const missing = computed(() =>
 const clone = (s) => JSON.parse(JSON.stringify(s));
 const findAsset = (name) =>
   props.assets.find((a) => a.name.toLowerCase() === String(name).toLowerCase());
+const imageForAsset = (name) => images.get(findAsset(name)?.id);
+function characterImages(character) {
+  if (character.layered) {
+    const body = imageForAsset(character.bodyAsset);
+    const face = imageForAsset(character.faceAsset);
+    return { body, face, reference: body || face };
+  }
+
+  const sprite = imageForAsset(character.asset);
+  return { sprite, reference: sprite };
+}
 function tinted(image, color) {
   if (!color || color === "white" || color.toLowerCase() === "#ffffff")
     return image;
@@ -84,7 +97,8 @@ function tinted(image, color) {
   return c;
 }
 function characterRect(c) {
-  const img = images.get(findAsset(c.asset)?.id),
+  const characterImage = characterImages(c),
+    img = characterImage.reference,
     h =
       1080 *
       (props.options?.characterHeight ??
@@ -101,6 +115,7 @@ function characterRect(c) {
     w,
     h,
     img,
+    ...characterImage,
   };
 }
 function draw() {
@@ -138,7 +153,14 @@ function draw() {
     if (r.img) {
       ctx.translate(r.x + (c.flip ? r.w : 0), r.y);
       ctx.scale(c.flip ? -1 : 1, 1);
-      ctx.drawImage(tinted(r.img, c.tint), 0, 0, r.w, r.h);
+      if (c.layered) {
+        if (r.body)
+          ctx.drawImage(tinted(r.body, c.tint), 0, 0, r.w, r.h);
+        if (r.face)
+          ctx.drawImage(tinted(r.face, c.tint), 0, 0, r.w, r.h);
+      } else {
+        ctx.drawImage(tinted(r.sprite, c.tint), 0, 0, r.w, r.h);
+      }
     } else {
       ctx.strokeStyle = "#b9a1b6";
       ctx.fillStyle = "#5a4a61";

@@ -99,6 +99,18 @@ test("Yarn export follows commands -> dialogue -> choices and jump mapping", () 
   w.tabs[0].rows[2].nextNode = "Missing";
   assert.throws(() => exportYarn(w, parseCommands), /Missing/);
 });
+test("Yarn export keeps Toka face commands profile-driven", () => {
+  const w = sampleWorkbook();
+  w.tabs[0].rows[0].command =
+    "[char:show:toka:Ch_Toka_Face_default:0.5:0.5:false]";
+  const yarn = exportYarn(w, parseCommands);
+
+  assert.match(
+    yarn,
+    /<<char "show" "toka" "Ch_Toka_Face_default" 0.5 0.5 false>>/,
+  );
+  assert.doesNotMatch(yarn, /Ch_Toka_Body_Casual/);
+});
 test("change review counts implicit node assignments explicitly", () => {
   const rows = [
     ["Start", "", "", "Hello"],

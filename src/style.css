@@ -887,6 +887,16 @@ fieldset {
   height: 43px;
   object-fit: contain;
 }
+.character-thumb {
+  position: relative;
+  flex: 0 0 35px;
+  width: 35px;
+  height: 43px;
+}
+.character-thumb img {
+  position: absolute;
+  inset: 0;
+}
 .character-item span {
   font-size: 13px;
   min-width: 0;
@@ -901,6 +911,19 @@ fieldset {
   border-bottom: 1px solid var(--line);
   padding-bottom: 15px;
   margin-bottom: 20px;
+}
+.toka-layer-note {
+  display: block;
+  margin: 0 0 12px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--field));
+  color: var(--muted);
+  line-height: 1.55;
+}
+.inspector-note.toka-layer-note {
+  margin-top: -3px;
 }
 .character-removal-group {
   margin-top: 17px;

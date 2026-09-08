@@ -293,6 +293,32 @@ export function rgba(value = "white") {
 export const seconds = (v) =>
   v === "instant" || v == null ? 0 : Math.max(0, Number(v) || 0);
 
+export const TOKA_DEFAULT_BODY_ASSET = "Ch_Toka_Body_Casual";
+
+export function isTokaCharacter(characterId) {
+  const id = String(characterId || "").trim().toLowerCase();
+  return id === "toka" || id === "momoka" || id === "白崎桃香";
+}
+
+export function isTokaFaceAsset(assetName) {
+  return String(assetName || "")
+    .trim()
+    .toLowerCase()
+    .startsWith("ch_toka_face_");
+}
+
+export function usesTokaPresetBody(characterId, assetName) {
+  return isTokaCharacter(characterId) && isTokaFaceAsset(assetName);
+}
+
+function setCharacterAsset(character, assetName) {
+  character.asset = assetName;
+  character.layered = usesTokaPresetBody(character.id, assetName);
+  character.bodyAsset = character.layered ? TOKA_DEFAULT_BODY_ASSET : "";
+  character.faceAsset = character.layered ? assetName : "";
+  return character;
+}
+
 export function emptyStage() {
   return {
     background: "",
@@ -312,20 +338,19 @@ export function applyCommand(state, command) {
   if (key === "background") s.background = v.asset;
   else if (key === "char:show") {
     const previous = get();
-    const character = {
+    const character = setCharacterAsset({
       id: v.id,
-      asset: v.asset,
       x: Number(v.x),
       scale: previous?.scale ?? 1,
       flip: ["true", "left", "flip", "flipped"].includes(v.flip),
       tint: previous?.tint ?? "white",
-    };
+    }, v.asset);
     s.characters = s.characters.filter((c) => !sameId(c));
     s.characters.push(character);
   } else if (key === "char:clear") s.characters = [];
   else if (key === "char:hide")
     s.characters = s.characters.filter((c) => !sameId(c));
-  else if (key === "char:face" && get()) get().asset = v.asset;
+  else if (key === "char:face" && get()) setCharacterAsset(get(), v.asset);
   else if (key === "char:move" && get()) get().x = Number(v.x);
   else if (key === "char:scale" && get()) get().scale = Number(v.scale);
   else if (key === "char:flip" && get())
