@@ -1,8 +1,8 @@
 import { isTokaCharacter } from "./commands.js";
 
 export const DEFAULT_PREVIEW_OPTIONS = Object.freeze({
-  characterHeight: 1.1,
-  bottomOffset: -175,
+  characterHeight: 1.3,
+  bottomOffset: -600,
 });
 
 export const PREVIEW_STAGE_WIDTH = 1920;

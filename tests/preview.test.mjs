@@ -13,8 +13,8 @@ test("character preview uses the requested framing by default", () => {
   assert.deepEqual(
     { ...DEFAULT_PREVIEW_OPTIONS },
     {
-      characterHeight: 1.1,
-      bottomOffset: -175,
+      characterHeight: 1.3,
+      bottomOffset: -600,
     },
   );
 });

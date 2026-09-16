@@ -1832,7 +1832,7 @@ onBeforeUnmount(() => {
                 min="0"
                 step="1"
                 placeholder="自動"
-              /><small>0 が最前。1 は 0 の後ろです。空欄なら従来の表示順を使います。</small></label
+              /><small>0 が最前。1 は 0 の後ろです。</small></label
             ><fieldset class="transition-fields character-transition">
               <legend>表示の切り替え</legend>
               <div class="segmented">
