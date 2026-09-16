@@ -16,6 +16,14 @@ const volume = () =>
   field("volume", "音量", "number", "1", { min: 0, max: 1, step: 0.05 });
 const position = () =>
   field("x", "横位置", "number", "0.5", { min: 0, max: 1, step: 0.05 });
+const displayOrder = (optional = false) =>
+  field("order", "表示順（0 が最前）", "number", optional ? "" : "0", {
+    min: 0,
+    max: 2147483647,
+    step: 1,
+    integer: true,
+    optional,
+  });
 const spec = (key, label, group, fields, aliases = []) => ({
   key,
   label,
@@ -43,8 +51,15 @@ export const COMMANDS = [
       field("flip", "左右反転", "select", "false", {
         options: ["false", "true"],
       }),
+      displayOrder(true),
     ],
     ["char:add"],
+  ),
+  spec(
+    "char:order",
+    "表示順を変更",
+    "キャラクター",
+    [id(), displayOrder()],
   ),
   spec(
     "char:face",
@@ -229,10 +244,12 @@ export function validateValues(definition, values) {
       errors.push(`${f.label}は instant または 0 以上の秒数です。`);
     if (
       f.type === "number" &&
+      !(f.optional && !v) &&
       (!v ||
         !Number.isFinite(Number(v)) ||
         Number(v) < (f.min ?? -Infinity) ||
-        Number(v) > (f.max ?? Infinity))
+        Number(v) > (f.max ?? Infinity) ||
+        (f.integer && !Number.isInteger(Number(v))))
     )
       errors.push(`${f.label}の値が範囲外です。`);
     if (
@@ -250,7 +267,12 @@ export function buildCommand(key, values = {}) {
   const definition = findSpec(key);
   const errors = validateValues(definition, values);
   if (errors.length) throw new Error(errors.join("\n"));
-  return `[${key}${definition.fields.length ? ":" : ""}${definition.fields.map((f) => String(values[f.key] ?? f.default).trim()).join(":")}]`;
+  const args = definition.fields.map((f) =>
+    String(values[f.key] ?? f.default).trim(),
+  );
+  while (args.length && definition.fields[args.length - 1].optional && !args.at(-1))
+    args.pop();
+  return `[${key}${args.length ? ":" + args.join(":") : ""}]`;
 }
 export function commandLabel(command) {
   return command.definition
@@ -329,6 +351,11 @@ export function emptyStage() {
     seVolume: 1,
   };
 }
+export function orderedCharacters(characters = []) {
+  return [...characters].sort(
+    (a, b) => (Number(b.order) || 0) - (Number(a.order) || 0),
+  );
+}
 export function applyCommand(state, command) {
   const s = JSON.parse(JSON.stringify(state)),
     v = command.values,
@@ -344,6 +371,8 @@ export function applyCommand(state, command) {
       scale: previous?.scale ?? 1,
       flip: ["true", "left", "flip", "flipped"].includes(v.flip),
       tint: previous?.tint ?? "white",
+      order: v.order === "" ? (previous?.order ?? 0) : Number(v.order),
+      orderExplicit: v.order !== "" || (previous?.orderExplicit ?? false),
     }, v.asset);
     s.characters = s.characters.filter((c) => !sameId(c));
     s.characters.push(character);
@@ -351,6 +380,10 @@ export function applyCommand(state, command) {
   else if (key === "char:hide")
     s.characters = s.characters.filter((c) => !sameId(c));
   else if (key === "char:face" && get()) setCharacterAsset(get(), v.asset);
+  else if (key === "char:order" && get()) {
+    get().order = Number(v.order);
+    get().orderExplicit = true;
+  }
   else if (key === "char:move" && get()) get().x = Number(v.x);
   else if (key === "char:scale" && get()) get().scale = Number(v.scale);
   else if (key === "char:flip" && get())

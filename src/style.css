@@ -970,6 +970,23 @@ fieldset {
   padding-bottom: 15px;
   margin-bottom: 20px;
 }
+.character-order-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 13px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.character-order-row small {
+  color: var(--ink);
+  font-size: 13px;
+  margin-left: 5px;
+}
+.character-order-row .button {
+  min-width: 72px;
+}
 .toka-layer-note {
   display: block;
   margin: 0 0 12px;

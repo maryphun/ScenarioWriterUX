@@ -41,6 +41,7 @@ import {
   commandLabel,
   stateAt,
   emptyStage,
+  orderedCharacters,
   validateValues,
   COLOR_NAMES,
   TOKA_DEFAULT_BODY_ASSET,
@@ -218,6 +219,7 @@ const characterForm = ref({
   x: 0.5,
   ...DEFAULT_CHARACTER_TRANSITION,
   flip: "false",
+  order: "",
 });
 const hideCharacterForm = ref({ ...DEFAULT_CHARACTER_TRANSITION });
 const connected = ref(false);
@@ -1616,7 +1618,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="character-list">
               <button
-                v-for="c in after.characters"
+                v-for="c in orderedCharacters(after.characters).reverse()"
                 :key="c.id"
                 class="character-item"
                 :class="{ active: selectedCharacter === c.id }"
@@ -1664,6 +1666,21 @@ onBeforeUnmount(() => {
                   /><span>{{ character.x.toFixed(2) }}</span>
                 </div></label
               >
+              <div class="character-order-row">
+                <span>表示順 <small>{{ character.orderExplicit ? character.order : "自動" }}</small></span>
+                <button
+                  class="button"
+                  @click="
+                    openCommand(
+                      'char:order',
+                      buildCommand('char:order', {
+                        id: character.id,
+                        order: character.order,
+                      }),
+                    )
+                  "
+                >変更</button>
+              </div>
               <div class="two-buttons">
                 <button
                   class="button"
@@ -1808,6 +1825,14 @@ onBeforeUnmount(() => {
                   max="1"
                   step=".05"
                 /></div></label
+            ><label
+              >表示順（任意）<input
+                v-model="characterForm.order"
+                type="number"
+                min="0"
+                step="1"
+                placeholder="自動"
+              /><small>0 が最前。1 は 0 の後ろです。空欄なら従来の表示順を使います。</small></label
             ><fieldset class="transition-fields character-transition">
               <legend>表示の切り替え</legend>
               <div class="segmented">

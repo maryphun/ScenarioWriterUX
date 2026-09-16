@@ -147,11 +147,13 @@ const optionsFor = (f) => props.assets.filter((a) => a.kind === f.kind);
             :min="f.min"
             :max="f.max"
             :step="f.step"
-            required
+            :required="!f.optional"
           />
         </div>
         <small v-if="f.key === 'x'"
           >0：左端より250px外 / 0.5：中央 / 1：右端より250px外</small
+        ><small v-else-if="f.key === 'order'"
+          >0 が最前。数字が大きいほど後ろです。表示時は空欄なら従来の表示順を使います。</small
         ></label
       >
       <label v-else

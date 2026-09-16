@@ -64,6 +64,7 @@ test("Vue editor and existing command forms render with their saved values", asy
     );
     assert.match(suggestedForm, /value="白崎桃香"/);
     assert.match(suggestedForm, /value="宮森楓"/);
+    assert.match(suggestedForm, /表示順（0 が最前）/);
   } finally {
     await server.close();
   }

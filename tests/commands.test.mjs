@@ -7,6 +7,7 @@ import {
   validateValues,
   stateAt,
   emptyStage,
+  orderedCharacters,
   TOKA_DEFAULT_BODY_ASSET,
 } from "../src/lib/commands.js";
 
@@ -41,6 +42,47 @@ test("character command IDs start blank", () => {
   )) {
     assert.equal(spec.fields.find((field) => field.key === "id").default, "");
   }
+});
+test("character display order is optional on show and can be changed later", () => {
+  assert.equal(
+    buildCommand("char:show", {
+      id: "front",
+      asset: "Front",
+      x: 0.5,
+      duration: "instant",
+      flip: "false",
+    }),
+    "[char:show:front:Front:0.5:instant:false]",
+  );
+  assert.equal(
+    buildCommand("char:show", {
+      id: "back",
+      asset: "Back",
+      x: 0.5,
+      duration: "instant",
+      flip: "false",
+      order: 1,
+    }),
+    "[char:show:back:Back:0.5:instant:false:1]",
+  );
+  assert.equal(buildCommand("char:order", { id: "front", order: 2 }), "[char:order:front:2]");
+  assert.throws(() => buildCommand("char:order", { id: "front", order: -1 }));
+  assert.throws(() => buildCommand("char:order", { id: "front", order: 1.5 }));
+
+  const state = stateAt(
+    [
+      {
+        command:
+          "[char:show:front:Front:0.5:instant:false:0] [char:show:back:Back:0.5:instant:false:1]",
+      },
+      { command: "[char:order:front:2]" },
+    ],
+    1,
+  );
+  assert.deepEqual(
+    orderedCharacters(state.characters).map((character) => character.id),
+    ["front", "back"],
+  );
 });
 test("multiple bracket commands preserve their order and unknown/incomplete commands", () => {
   const raw =

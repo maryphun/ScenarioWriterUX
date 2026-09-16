@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import {
   applyCommand,
+  orderedCharacters,
   parseCommands,
   buildCommand,
   cssColor,
@@ -145,7 +146,7 @@ function draw() {
     ctx.fillRect(0, 0, 1920, 1080);
     ctx.restore();
   }
-  for (const c of display.value.characters) {
+  for (const c of orderedCharacters(display.value.characters)) {
     const r = characterRect(c);
     ctx.save();
     ctx.globalAlpha = (c.opacity ?? 1) * rgba(c.tint)[3];
@@ -422,7 +423,7 @@ function pointerDown(event) {
   const r = canvas.value.getBoundingClientRect(),
     x = ((event.clientX - r.left) * 1920) / r.width,
     y = ((event.clientY - r.top) * 1080) / r.height;
-  const hit = [...display.value.characters].reverse().find((c) => {
+  const hit = orderedCharacters(display.value.characters).reverse().find((c) => {
     const b = characterRect(c);
     return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
   });
