@@ -17,6 +17,7 @@ import {
   characterPositionFromCenter,
   isNonSpeakingCharacter,
 } from "../lib/preview.js";
+import { createCharacterEffects, isCharacterEffect } from "../lib/character-effects.js";
 const props = defineProps({
   before: Object,
   after: Object,
@@ -45,6 +46,7 @@ const images = new Map(),
 let generation = 0,
   bgm = null,
   resizeObserver;
+const characterEffects = createCharacterEffects({ tween, changed: draw });
 const speaker = computed(() =>
   props.speakers.find((s) => s.name === props.row?.speaker),
 );
@@ -110,7 +112,7 @@ function characterRect(c) {
     w = img ? (img.width / img.height) * h : h * 0.45;
   const x = characterCenterX(c.x, w);
   return {
-    x: x - w / 2,
+    x: x - w / 2 + characterEffects.offsetFor(c),
     y:
       1080 -
       h -
@@ -148,8 +150,9 @@ function draw() {
   }
   for (const c of orderedCharacters(display.value.characters)) {
     const r = characterRect(c);
+    const tint = characterEffects.colorFor(c);
     ctx.save();
-    ctx.globalAlpha = (c.opacity ?? 1) * rgba(c.tint)[3];
+    ctx.globalAlpha = (c.opacity ?? 1) * rgba(tint)[3];
     ctx.filter = isNonSpeakingCharacter(c.id, props.row?.speaker)
       ? NON_SPEAKER_FILTER
       : "none";
@@ -158,15 +161,16 @@ function draw() {
       ctx.scale(c.flip ? -1 : 1, 1);
       if (c.layered) {
         if (r.body)
-          ctx.drawImage(tinted(r.body, c.tint), 0, 0, r.w, r.h);
+          ctx.drawImage(tinted(r.body, tint), 0, 0, r.w, r.h);
         if (r.face)
-          ctx.drawImage(tinted(r.face, c.tint), 0, 0, r.w, r.h);
+          ctx.drawImage(tinted(r.face, tint), 0, 0, r.w, r.h);
       } else {
-        ctx.drawImage(tinted(r.sprite, c.tint), 0, 0, r.w, r.h);
+        ctx.drawImage(tinted(r.sprite, tint), 0, 0, r.w, r.h);
       }
     } else {
       ctx.strokeStyle = "#b9a1b6";
-      ctx.fillStyle = "#5a4a61";
+      const placeholder = rgba("#5a4a61"), color = rgba(tint);
+      ctx.fillStyle = `rgb(${placeholder.slice(0, 3).map((channel, i) => Math.round(channel * color[i] * 255)).join(",")})`;
       ctx.fillRect(r.x, r.y, r.w, r.h);
       ctx.strokeRect(r.x, r.y, r.w, r.h);
       ctx.textAlign = "center";
@@ -195,6 +199,7 @@ async function loadImages() {
 }
 function stop(reset = true) {
   generation++;
+  characterEffects.clear();
   busy.value = false;
   emit("playing", false);
   for (const item of audio.values()) item.pause();
@@ -212,13 +217,20 @@ function seek() {
   display.value = clone(props.after);
   backgroundFade.value.opacity = 0;
   draw();
+  previewCharacterEffects();
+}
+function previewCharacterEffects() {
+  if (props.instruction) return;
+  const token = generation;
+  for (const command of parseCommands(props.row?.command))
+    if (isCharacterEffect(command)) characterEffects.start(command, token);
 }
 watch(() => [props.after, props.row?.key], seek, { deep: true });
 watch(() => props.row?.speaker, draw);
 watch(() => props.assets, loadImages, { deep: true });
 watch(() => props.options, draw, { deep: true });
-function tween(duration, token, update) {
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) duration = 0;
+function tween(duration, token, update, { spatial = true } = {}) {
+  if (spatial && matchMedia("(prefers-reduced-motion: reduce)").matches) duration = 0;
   return new Promise((resolve) => {
     const start = performance.now();
     function frame(now) {
@@ -292,6 +304,16 @@ async function play() {
   let state = clone(props.before);
   display.value = clone(state);
   draw();
+  const effectCommands = parseCommands(props.row?.command).filter(isCharacterEffect);
+  const effectTasks = effectCommands.map((command) => characterEffects.start(command, token));
+  let immediateAudioState = clone(state);
+  for (const command of parseCommands(props.row?.command)) {
+    if (!command.definition || validateValues(command.definition, command.values).length) continue;
+    if (command.canonical.startsWith("se:")) {
+      effectTasks.push(playAudio(command, immediateAudioState, token));
+      immediateAudioState = applyCommand(immediateAudioState, command);
+    }
+  }
   if (state.bgm.playing && state.bgm.asset)
     await playAudio(
       parseCommands(buildCommand("bgm:play", { asset: state.bgm.asset }))[0],
@@ -302,6 +324,11 @@ async function play() {
     if (token !== generation) break;
     if (!c.definition || validateValues(c.definition, c.values).length)
       continue;
+    if (isCharacterEffect(c)) continue;
+    if (c.canonical.startsWith("se:")) {
+      state = applyCommand(state, c);
+      continue;
+    }
     const next = applyCommand(state, c),
       v = c.values,
       d = seconds(v.duration);
@@ -412,6 +439,7 @@ async function play() {
       draw();
     }
   }
+  await Promise.all(effectTasks);
   if (token === generation) {
     busy.value = Boolean(bgm && !bgm.paused);
     emit("playing", busy.value);
@@ -454,6 +482,7 @@ onMounted(() => {
   draw();
   resizeObserver = new ResizeObserver(draw);
   resizeObserver.observe(stage.value);
+  previewCharacterEffects();
 });
 onBeforeUnmount(() => {
   stop();

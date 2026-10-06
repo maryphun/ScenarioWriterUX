@@ -90,3 +90,12 @@ test("JSON payload preserves Japanese names, order, quotes and backslashes", () 
   assert.deepEqual(groups(prepared)[0][0].args, ["show", "白崎桃香", 'Sprite\\folder"quote', "0.5", "0.5", "false", "0"]);
   assert.deepEqual(groups(prepared)[0][1].args, ["order", "白崎桃香", "1"]);
 });
+
+test("character flash/shake travel with SE and preserve initial setup across effects", () => {
+  const prepared = prepareYarnStageText('<<char show A Sprite 0.5 0.5 false>>\n<<char flash A "#ff2040">>\n<<se play Bell>>\n<<char shake A 10>>\n<<char move A 0.8 instant>>\nA: Text');
+  const stage = groups(prepared)[0];
+  assert.deepEqual(stage[0].args, ["show", "A", "Sprite", "0.8", "0.5", "false", "keep", "keep", "instant"]);
+  assert.deepEqual(stage[1].args, ["flash", "A", "#ff2040"]);
+  assert.deepEqual(stage[3].args, ["shake", "A", "10"]);
+  assert.equal(stage.length, 4);
+});

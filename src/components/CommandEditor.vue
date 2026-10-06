@@ -116,9 +116,10 @@ const optionsFor = (f) => props.assets.filter((a) => a.kind === f.kind);
             type="color"
             aria-label="色を選ぶ"
             @input="values[f.key] = $event.target.value"
-          /><input v-model="values[f.key]" list="command-colors" required />
+          /><input v-model="values[f.key]" :list="f.hexOnly ? undefined : 'command-colors'" required />
         </div>
-        <small v-if="definition.key === 'background'"
+        <small v-if="f.hexOnly">選んだ色を #RRGGBB 形式で保存します。</small>
+        <small v-else-if="definition.key === 'background'"
           >既定：black（黒）</small
         ></label
       >
@@ -134,7 +135,7 @@ const optionsFor = (f) => props.assets.filter((a) => a.kind === f.kind);
         >{{ f.label }}
         <div class="number-control">
           <input
-            v-if="f.max === 1"
+            v-if="f.max === 1 || (f.key === 'strength' && f.max === 10)"
             v-model="values[f.key]"
             type="range"
             :min="f.min"
@@ -176,6 +177,12 @@ const optionsFor = (f) => props.assets.filter((a) => a.kind === f.kind);
         </datalist></label
       >
     </template>
+    <p v-if="definition.key === 'char:flash'" class="meta">
+      即時に着色し、0.5秒で通常の色に戻します。
+    </p>
+    <p v-else-if="definition.key === 'char:shake'" class="meta">
+      この立ち絵だけを0.7秒、左右に揺らします。
+    </p>
     <datalist id="command-colors">
       <option v-for="color in COLOR_NAMES" :key="color" :value="color" />
     </datalist>

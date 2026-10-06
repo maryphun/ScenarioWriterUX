@@ -145,6 +145,23 @@ const isChoice = computed(() =>
   Boolean(current.value?.choice || current.value?.nextNode),
 );
 const commands = computed(() => parseCommands(current.value?.command || ""));
+const commandColumns = computed(() => {
+  const grouped = { background: [], character: [], effect: [] };
+  commands.value.forEach((command, index) => {
+    const key = command.canonical || command.key || "";
+    const group = ["background", "bg"].includes(key)
+      ? "background"
+      : key.startsWith("char:") && !["char:tint", "char:color", "char:flash", "char:shake"].includes(key)
+        ? "character"
+        : "effect";
+    grouped[group].push({ command, index });
+  });
+  return [
+    { key: "background", label: "背景", commands: grouped.background },
+    { key: "character", label: "キャラクター", commands: grouped.character },
+    { key: "effect", label: "演出", commands: grouped.effect },
+  ];
+});
 const before = computed(() =>
   stateAt(
     lines.value.map((e) => e.row),
@@ -1415,45 +1432,55 @@ onBeforeUnmount(() => {
         <section v-if="current && !currentIsInstruction" class="line-direction">
           <div class="panel-heading">
             <h2>この行の演出</h2>
-            <button class="text-button" @click="openNode('choice')">
-              <GitBranch :size="15" />選択肢を追加
-            </button>
-          </div>
-          <div class="command-drop" @dragover.prevent @drop="dropCommand">
-            <div
-              v-for="(c, i) in commands"
-              :key="i"
-              class="command-chip"
-              draggable="true"
-              @dragstart="
-                $event.dataTransfer.setData(
-                  'application/x-scenario-command-index',
-                  String(i),
-                )
-              "
-              @dragover.prevent
-              @drop.stop="reorderCommand($event, i)"
-            >
-              <button
-                @click="
-                  c.definition
-                    ? openCommand(c.key, c.raw, i)
-                    : notify('下のコマンド欄から直接編集できます。')
-                "
-              >
-                <GripVertical :size="13" />{{ commandLabel(c) }}</button
-              ><button
-                :aria-label="commandLabel(c) + 'を削除'"
-                @click="removeCommand(i)"
-              >
-                <X :size="13" />
+            <div class="line-direction-actions">
+              <button class="text-button" @click="openCommand()">
+                <Plus :size="15" />追加
+              </button>
+              <button class="text-button" @click="openNode('choice')">
+                <GitBranch :size="15" />選択肢を追加
               </button>
             </div>
-            <button class="add-command" @click="openCommand()">
-              <Plus :size="15" />{{
-                commands.length ? "追加" : "演出を追加・ここにドロップ"
-              }}
-            </button>
+          </div>
+          <div class="command-drop" @dragover.prevent @drop="dropCommand">
+            <section
+              v-for="column in commandColumns"
+              :key="column.key"
+              class="command-column"
+              :aria-labelledby="'command-column-' + column.key"
+            >
+              <h3 :id="'command-column-' + column.key">{{ column.label }}</h3>
+              <div
+                v-for="{ command: c, index: i } in column.commands"
+                :key="i"
+                class="command-chip"
+                draggable="true"
+                @dragstart="
+                  $event.dataTransfer.setData(
+                    'application/x-scenario-command-index',
+                    String(i),
+                  )
+                "
+                @dragover.prevent
+                @drop.stop="reorderCommand($event, i)"
+              >
+                <button
+                  @click="
+                    c.definition
+                      ? openCommand(c.key, c.raw, i)
+                      : notify('下のコマンド欄から直接編集できます。')
+                  "
+                >
+                  <GripVertical :size="13" /><span>{{ commandLabel(c) }}</span>
+                </button>
+                <button
+                  :aria-label="commandLabel(c) + 'を削除'"
+                  @click="removeCommand(i)"
+                >
+                  <X :size="13" />
+                </button>
+              </div>
+              <p v-if="!column.commands.length" class="command-empty">ここにドロップ</p>
+            </section>
           </div>
           <details class="raw-details">
             <summary>コマンド・メモ</summary>
@@ -1733,6 +1760,18 @@ onBeforeUnmount(() => {
                   "
                 >
                   色
+                </button>
+                <button
+                  class="button"
+                  @click="openCommand('char:flash', buildCommand('char:flash', { id: character.id }))"
+                >
+                  一瞬着色
+                </button>
+                <button
+                  class="button"
+                  @click="openCommand('char:shake', buildCommand('char:shake', { id: character.id }))"
+                >
+                  横に揺らす
                 </button>
               </div>
               <div class="character-removal-group">

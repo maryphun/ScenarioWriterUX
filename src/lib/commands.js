@@ -98,6 +98,20 @@ export const COMMANDS = [
     ["char:color"],
   ),
   spec(
+    "char:flash",
+    "立ち絵を一瞬着色",
+    "キャラクター",
+    [id(), field("color", "着色する色", "color", "#ffffff", { hexOnly: true })],
+  ),
+  spec(
+    "char:shake",
+    "立ち絵を横に揺らす",
+    "キャラクター",
+    [id(), field("strength", "強さ（1〜10）", "number", "1", {
+      min: 1, max: 10, step: 1, integer: true,
+    })],
+  ),
+  spec(
     "char:scale",
     "立ち絵のサイズ",
     "キャラクター",
@@ -258,6 +272,8 @@ export function validateValues(definition, values) {
       !/^#[\da-f]{6}([\da-f]{2})?$/i.test(v)
     )
       errors.push("色名または #RRGGBB / #RRGGBBAA を入力してください。");
+    if (f.hexOnly && !/^#[\da-f]{6}$/i.test(v))
+      errors.push(`${f.label}は #RRGGBB 形式で指定してください。`);
     if (f.type === "select" && !f.options.includes(v))
       errors.push(`${f.label}を選択してください。`);
   }

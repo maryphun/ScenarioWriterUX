@@ -23,6 +23,7 @@ test("Vue editor and existing command forms render with their saved values", asy
   const server = await createServer({
     configFile: false,
     plugins: [vue()],
+    optimizeDeps: { noDiscovery: true, include: [] },
     server: { middlewareMode: true },
     appType: "custom",
   });
@@ -65,6 +66,14 @@ test("Vue editor and existing command forms render with their saved values", asy
     assert.match(suggestedForm, /value="白崎桃香"/);
     assert.match(suggestedForm, /value="宮森楓"/);
     assert.match(suggestedForm, /表示順（0 が最前）/);
+    const flashForm = await renderToString(createSSRApp(CommandEditor, { initial: "[char:flash:白崎桃香:#ff2040]" }));
+    assert.match(flashForm, /type="color"/);
+    assert.match(flashForm, /value="#ff2040"/);
+    assert.match(flashForm, /0\.5秒/);
+    const shakeForm = await renderToString(createSSRApp(CommandEditor, { initial: "[char:shake:白崎桃香:10]" }));
+    assert.match(shakeForm, /type="range"[\s\S]*?min="1"[\s\S]*?max="10"/);
+    assert.match(shakeForm, /value="10"/);
+    assert.match(shakeForm, /0\.7秒/);
   } finally {
     await server.close();
   }

@@ -62,7 +62,8 @@ function prepareInitialSetup(commands, coordinateStage = false) {
       }
       continue;
     }
-    if (!coordinateStage || !effectKinds.includes(parsed?.[0])) shows.clear();
+    const immediateCharacterEffect = tokens && ["flash", "shake"].includes(action);
+    if (!coordinateStage || !(effectKinds.includes(parsed?.[0]) || immediateCharacterEffect)) shows.clear();
     output.push(command);
     outputTokens.push(tokens);
   }
@@ -89,7 +90,7 @@ function prepareStage(commands) {
     shownIds.clear();
     hasBackground = false;
   }
-  const actions = ["show", "add", "hide", "remove", "move", "position", "face", "sprite", "variation", "flip", "tint", "color", "scale", "size", "order"];
+  const actions = ["show", "add", "hide", "remove", "move", "position", "face", "sprite", "variation", "flip", "tint", "color", "flash", "shake", "scale", "size", "order"];
   for (const command of commands) {
     const tokens = tokensFor(command), kind = tokens?.[0] || "";
     const background = ["background", "bg"].includes(kind);
