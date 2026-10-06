@@ -42,7 +42,7 @@ function initializeEditor() {
 }
 
 function doGet() {
-  return json_({ ok: true, service: "ScenarioWriterUX", version: 8 });
+  return json_({ ok: true, service: "ScenarioWriterUX", version: 7 });
 }
 function doPost(e) {
   try {
@@ -286,72 +286,6 @@ function isInstructionRow_(row) {
     })
   );
 }
-function instructionFormat_() {
-  return {
-    backgroundColor: { red: 0, green: 0, blue: 0 },
-    textFormat: {
-      bold: true,
-      foregroundColor: { red: 1, green: 1, blue: 1 },
-    },
-  };
-}
-function instructionColorMatches_(format, colorKey, styleKey, channel) {
-  if (!format) return false;
-  const style = format[styleKey],
-    color = style ? style.rgbColor : format[colorKey];
-  if (!color) return false;
-  // Sheets omits zero RGB channels and may return ColorStyle instead of Color.
-  return ["red", "green", "blue"].every(function (key) {
-    return (color[key] || 0) === channel;
-  }) && (color.alpha === undefined || color.alpha === 1);
-}
-function hasInstructionFormat_(format) {
-  return instructionColorMatches_(format, "backgroundColor", "backgroundColorStyle", 0)
-    && format.textFormat?.bold === true
-    && instructionColorMatches_(format.textFormat, "foregroundColor", "foregroundColorStyle", 1);
-}
-function instructionRule_(sheetId) {
-  return {
-    ranges: [{ sheetId: sheetId, startRowIndex: 1, startColumnIndex: 0, endColumnIndex: 8 }],
-    booleanRule: {
-      condition: {
-        type: "CUSTOM_FORMULA",
-        values: [{ userEnteredValue: '=AND(LEFT(TRIM($A2),1)="[",RIGHT(TRIM($A2),1)="]",LEN(TRIM($B2&$C2&$D2&$E2&$F2&$G2&$H2))=0)' }],
-      },
-      format: instructionFormat_(),
-    },
-  };
-}
-function instructionRuleRequests_(book, sheet, rowCount, reanchor) {
-  const sheetId = sheet.getSheetId(),
-    desired = instructionRule_(sheetId),
-    response = Sheets.Spreadsheets.get(book.getId(), {
-      fields: "sheets(properties(sheetId),conditionalFormats)",
-    }),
-    current = (response.sheets || []).find(function (item) {
-      return (item.properties?.sheetId || 0) === sheetId;
-    }),
-    rules = current?.conditionalFormats || [],
-    index = rules.findIndex(function (rule) {
-      return stableStringify_(rule.booleanRule?.condition) === stableStringify_(desired.booleanRule.condition);
-    });
-  if (index < 0) return [{ addConditionalFormatRule: { rule: desired, index: 0 } }];
-  const rule = rules[index],
-    range = rule.ranges?.[0],
-    requiredRows = Math.max(sheet.getMaxRows(), rowCount + 1),
-    correctRange = rule.ranges?.length === 1 && range
-      && (range.sheetId || 0) === sheetId
-      && (range.startRowIndex || 0) === 1
-      && (range.startColumnIndex || 0) === 0
-      && range.endColumnIndex === 8
-      && (range.endRowIndex === undefined || range.endRowIndex >= requiredRows),
-    requests = [];
-  if (reanchor || !correctRange || !hasInstructionFormat_(rule.booleanRule.format))
-    requests.push({ updateConditionalFormatRule: { index: index, rule: desired } });
-  if (index !== 0)
-    requests.push({ updateConditionalFormatRule: { sheetId: sheetId, index: index, newIndex: 0 } });
-  return requests;
-}
 function validateBaseRows_(rows) {
   if (!Array.isArray(rows) || rows.length > MAX_SCRIPT_ROWS)
     fail_("BAD_REQUEST", "同期元の行データが不正です。");
@@ -587,7 +521,7 @@ function saveTab_(body) {
       }),
     };
   });
-  const requests = [], fullyFormattedRows = new Set();
+  const requests = [];
   const directUpdate =
     targetRows.length === previous.rows.length &&
     hasDirectSourceOrder_(targetSourceRows, previous.rows.length);
@@ -609,7 +543,6 @@ function saveTab_(body) {
     )
       changed = [0, 1, 2, 3, 4, 5, 6, 7];
     if (!changed.length) return;
-    if (changed.length === 8) fullyFormattedRows.add(r);
     const groups = [];
     changed.forEach(function (column) {
       const last = groups[groups.length - 1];
@@ -723,28 +656,7 @@ function saveTab_(body) {
             "userEnteredValue,userEnteredFormat,dataValidation,note,textFormatRuns",
         },
       });
-    targetRows.forEach(function (_, r) { fullyFormattedRows.add(r); });
   }
-  // Run repairs after structural changes, at each retained instruction's final row.
-  // The field mask touches only the instruction's black/white/bold presentation.
-  targetRows.forEach(function (row, r) {
-    if (!isInstructionRow_(row) || fullyFormattedRows.has(r)) return;
-    const source = targetSourceRows[r],
-      cells = source === null ? [] : previous.cells[source - 2]?.values || [];
-    if (Array.from({ length: 8 }, function (_, column) {
-      return hasInstructionFormat_(cells[column]?.userEnteredFormat);
-    }).every(Boolean)) return;
-    requests.push({
-      repeatCell: {
-        range: { sheetId: sheet.getSheetId(), startRowIndex: r + 1, endRowIndex: r + 2, startColumnIndex: 0, endColumnIndex: 8 },
-        cell: { userEnteredFormat: instructionFormat_() },
-        fields: "userEnteredFormat.backgroundColor,userEnteredFormat.backgroundColorStyle,userEnteredFormat.textFormat.bold,userEnteredFormat.textFormat.foregroundColor,userEnteredFormat.textFormat.foregroundColorStyle",
-      },
-    });
-  });
-  // Re-anchor the owned rule after row changes without replacing speaker rules.
-  requests.push(...instructionRuleRequests_(book, sheet, targetRows.length,
-    requests.some(function (request) { return request.insertRange || request.deleteRange; })));
   if (requests.length) {
     const folderId =
       PropertiesService.getScriptProperties().getProperty("BACKUP_FOLDER_ID");
