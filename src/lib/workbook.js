@@ -1,3 +1,5 @@
+import { prepareYarnStageText } from "./yarn-stage.js";
+
 export const SHEET_ID = "1nyJ6dGCOI1a9f9Nujc7XhxoHXj7qh1cmeDPvAFdLLx4";
 export const HEADERS = [
   "Node",
@@ -291,7 +293,7 @@ export function exportYarn(workbook, parseCommands) {
                 if (row.nextNode) output.push(`    <<jump ${row.nextNode}>>`);
               }
             }
-            return output.concat("===", "").join("\n");
+            return prepareYarnStageText(output.concat("===", "").join("\n"));
           })
           .join("\n"),
     )

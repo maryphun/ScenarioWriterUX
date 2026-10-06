@@ -12,6 +12,8 @@
 
 When updating the backend, use **Deploy → Manage deployments → Edit → New version**. Keep the same deployment URL.
 
+The instruction-format repair requires the current `Code.gs` (API version **8**). Replace the deployed project's source, then publish a new version through the existing deployment. Saving a tab repairs any instruction row whose base formatting was cleared and ensures its instruction conditional rule takes priority. Merely reconnecting remains read only.
+
 ## API behavior
 
 - All data operations use JSON in a `text/plain` POST. Browser fetch follows the Google ContentService redirect. No JSONP, URL secrets, `no-cors`, or unreadable success responses are used.
@@ -21,7 +23,7 @@ When updating the backend, use **Deploy → Manage deployments → Edit → New 
 - Local row insertions and deletions use `insertRange` / `deleteRange` for A:H in the same atomic batch as sparse cell updates. Unchanged script rows are shifted by Sheets instead of being rewritten with all of their formatting; column I onward is not shifted.
 - Revision payloads are canonicalized before hashing because the Sheets API does not guarantee JSON object property order. This prevents unchanged cell formatting from causing false conflict errors.
 - Existing cell formats, validation and notes follow source rows. Column I onward and the header row are outside the write range. Formulas in script columns cause a refusal to save, rather than being converted to text.
-- A row containing only bracketed text in column A is formatted black across A:H with bold white text. These production-instruction rows remain ordinary string values and are ignored by the editor's node and Yarn logic.
+- A row containing only bracketed text in column A is formatted black across A:H with bold white text. Saving repairs that row's owned styles even when its values did not change; it does not rewrite notes, validation, or unrelated formatting during repair. A first-priority conditional rule derives the same appearance from the content across A2:H, so later background resets do not hide white text. Saves reuse or restore that rule and re-anchor it after row shifts while retaining the existing speaker rules. These production-instruction rows remain ordinary string values and are ignored by the editor's node and Yarn logic.
 - All new cell values are explicit strings, so text starting with `=` remains text.
 - Assets are private Drive files returned only through authenticated API requests. Anyone with the editor key can read/write this workbook and its asset library. Rotate `EDITOR_ACCESS_KEY` in Script properties if team access changes.
 - Deleting a shared asset removes it from the shared index and moves its Drive file to Trash. Restoring the file from Drive Trash does not automatically add it back to the shared index.
