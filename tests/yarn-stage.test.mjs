@@ -42,6 +42,16 @@ test("new character initial pose is set before stage presentation, including acr
   assert.match(prepared, /残る人: こんにちは #line:stable/);
 });
 
+test("Yarn export retains extended show and move positions", () => {
+  const tab = importTab({ id: 1, name: "Story", rows: [
+    ["Start", "left", "a", "左", "", "", "[char:show:a:Sprite:-0.5:0.5:false]"],
+    ["Start", "right", "a", "右", "", "", "[char:move:a:1.5:instant]"],
+  ] });
+  const prepared = exportYarn({ tabs: [tab], speakers: [] }, parseCommands);
+  assert.match(prepared, /<<char "show" "a" "Sprite" -0\.5 0\.5 false>>/);
+  assert.match(prepared, /<<char "move" "a" 1\.5 "instant">>/);
+});
+
 test("expressions, dialogue, branches and node boundaries retain sequencing", () => {
   const show = '<<char show A Sprite 0.5 0.5 false>>', move = '<<char move B 0.8 instant>>';
   for (const boundary of ['<<char move B $position instant>>', '<<bgm play $theme>>', '<<custom instruction>>', 'A: 台詞', '-> Choice', '===\ntitle: Next\n---']) {

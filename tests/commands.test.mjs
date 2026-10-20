@@ -9,6 +9,8 @@ import {
   emptyStage,
   orderedCharacters,
   TOKA_DEFAULT_BODY_ASSET,
+  PEACH_DEFAULT_BODY_ASSET,
+  characterBodyPreset,
 } from "../src/lib/commands.js";
 
 test("all supplied command families round-trip, including aliases and optional defaults", () => {
@@ -106,9 +108,23 @@ test("background defaults are instant and black, valid alpha colors supported", 
     /\.6:#000000AA/,
   );
 });
+test("character show and move retain extended positions through parsing and stage state", () => {
+  for (const x of [-0.5, -0.25, 1.1, 1.5]) {
+    const show = buildCommand("char:show", { id: "a", asset: "Sprite", x });
+    assert.equal(Number(parseCommands(show)[0].values.x), x);
+    assert.equal(stateAt([{ command: show }], 0).characters[0].x, x);
+    const move = buildCommand("char:move", { id: "a", x });
+    assert.equal(stateAt([
+      { command: "[char:show:a:Sprite:0.5:instant:false]" },
+      { command: move },
+    ], 1).characters[0].x, x);
+  }
+});
+
 test("parameter validation rejects malformed positions, volume, duration and asset names", () => {
   assert.throws(() => buildCommand("background", { asset: "Bad:Name" }));
-  assert.throws(() => buildCommand("char:move", { id: "a", x: 1.1 }));
+  assert.throws(() => buildCommand("char:move", { id: "a", x: 1.51 }));
+  assert.throws(() => buildCommand("char:move", { id: "a", x: -0.51 }));
   assert.throws(() => buildCommand("bgm:volume", { volume: -1 }));
   assert.throws(() => buildCommand("fade:out", { duration: "NaN" }));
   assert.throws(() =>
@@ -174,6 +190,46 @@ test("Toka face assets use the default body while explicit sprites stay single-l
   ).characters[0];
   assert.equal(unrelated.layered, false);
 });
+test("Peach uses the transformed preset, swaps faces and keeps explicit sprite overrides", () => {
+  const rows = [
+    { command: "[char:show:ピュアプリピーチ:Ch_Toka_Face_default:-0.25:instant:true:2] [char:scale:ピュアプリピーチ:1.2:instant] [char:tint:ピュアプリピーチ:#888888:instant]" },
+    { command: "[char:face:ピュアプリピーチ:Ch_Toka_Face_angry:0.2]" },
+  ];
+  const layered = stateAt(rows, 1).characters[0];
+  assert.equal(layered.layered, true);
+  assert.equal(layered.bodyAsset, PEACH_DEFAULT_BODY_ASSET);
+  assert.equal(layered.faceAsset, "Ch_Toka_Face_angry");
+  assert.equal(layered.asset, "Ch_Toka_Face_angry");
+  assert.equal(layered.x, -0.25);
+  assert.equal(layered.scale, 1.2);
+  assert.equal(layered.flip, true);
+  assert.equal(layered.order, 2);
+  assert.equal(layered.tint, "#888888");
+
+  rows.push({ command: "[char:face:ピュアプリピーチ:Ch_Toka_TF_angry:instant]" });
+  const explicit = stateAt(rows, 2).characters[0];
+  assert.equal(explicit.layered, false);
+  assert.equal(explicit.bodyAsset, "");
+  assert.equal(explicit.faceAsset, "");
+  assert.equal(explicit.asset, "Ch_Toka_TF_angry");
+
+  rows.push({ command: "[char:sprite:ピュアプリピーチ:Ch_Toka_Face_flatter:instant]" });
+  const restored = stateAt(rows, 3).characters[0];
+  assert.equal(restored.bodyAsset, PEACH_DEFAULT_BODY_ASSET);
+  assert.equal(restored.faceAsset, "Ch_Toka_Face_flatter");
+});
+
+test("Toka and Peach presets stay distinct and other character IDs stay single-sprite", () => {
+  const state = stateAt([{command: "[char:show:白崎桃香:Ch_Toka_Face_default] [char:show:ピュアプリピーチ:Ch_Toka_Face_default] [char:show:other:Ch_Toka_Face_default]"}], 0);
+  assert.deepEqual(state.characters.map(c => c.bodyAsset), [TOKA_DEFAULT_BODY_ASSET, PEACH_DEFAULT_BODY_ASSET, ""]);
+  assert.deepEqual(state.characters.map(c => c.layered), [true, true, false]);
+  assert.deepEqual(characterBodyPreset(" ピュアプリピーチ "), {label:"ピュアプリピーチ",bodyAsset:"Ch_Toka_Body_TF"});
+  for (const id of ["toka", "Toka", "momoka", "白崎桃香"])
+    assert.equal(characterBodyPreset(id).bodyAsset, TOKA_DEFAULT_BODY_ASSET);
+  assert.equal(characterBodyPreset("other"), null);
+  assert.equal(characterBodyPreset(""), null);
+});
+
 test("fade, dialogue and audio states persist through branches without mutating initial state", () => {
   const initial = emptyStage();
   initial.background = "Room";

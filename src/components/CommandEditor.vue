@@ -135,7 +135,7 @@ const optionsFor = (f) => props.assets.filter((a) => a.kind === f.kind);
         >{{ f.label }}
         <div class="number-control">
           <input
-            v-if="f.max === 1 || (f.key === 'strength' && f.max === 10)"
+            v-if="f.key === 'x' || f.max === 1 || (f.key === 'strength' && f.max === 10)"
             v-model="values[f.key]"
             type="range"
             :min="f.min"
@@ -152,7 +152,7 @@ const optionsFor = (f) => props.assets.filter((a) => a.kind === f.kind);
           />
         </div>
         <small v-if="f.key === 'x'"
-          >0：左端より250px外 / 0.5：中央 / 1：右端より250px外</small
+          >−0.5〜1.5：0.5が中央。0未満でさらに左、1超でさらに右へ。</small
         ><small v-else-if="f.key === 'order'"
           >0 が最前。数字が大きいほど後ろです。表示時は空欄なら従来の表示順を使います。</small
         ></label

@@ -34,8 +34,12 @@ import {
 } from "lucide-vue-next";
 import StagePreview from "./components/StagePreview.vue";
 import CommandEditor from "./components/CommandEditor.vue";
+import RowStatusMenu from "./components/RowStatusMenu.vue";
+import { copySceneStatus, sceneStatusCommands } from "./lib/scene-status.js";
 import {
   COMMANDS,
+  CHARACTER_POSITION_MIN,
+  CHARACTER_POSITION_MAX,
   parseCommands,
   buildCommand,
   commandLabel,
@@ -44,9 +48,8 @@ import {
   orderedCharacters,
   validateValues,
   COLOR_NAMES,
-  TOKA_DEFAULT_BODY_ASSET,
-  isTokaCharacter,
-  isTokaFaceAsset,
+  characterBodyPreset,
+  usesPresetBody,
 } from "./lib/commands.js";
 import {
   DEFAULT_CHARACTER_TRANSITION,
@@ -126,6 +129,8 @@ const nodeForm = ref({ mode: "scene", target: "new", name: "", text: "" }),
 const undoStack = ref([]),
   redoStack = ref([]),
   previewOptions = ref({ ...DEFAULT_PREVIEW_OPTIONS });
+const copiedStatus = ref(null), rowMenu = ref(null);
+let rowMenuTrigger;
 const tab = computed(
   () =>
     workbook.value.tabs.find((t) => t.id === tabId.value) ||
@@ -149,7 +154,7 @@ const commandColumns = computed(() => {
   const grouped = { background: [], character: [], effect: [] };
   commands.value.forEach((command, index) => {
     const key = command.canonical || command.key || "";
-    const group = ["background", "bg"].includes(key)
+    const group = ["background", "bg", "background:clear", "bg:clear"].includes(key)
       ? "background"
       : key.startsWith("char:") && !["char:tint", "char:color", "char:flash", "char:shake"].includes(key)
         ? "character"
@@ -213,6 +218,7 @@ const assetUrl = (name) =>
 const character = computed(() =>
   after.value.characters.find((c) => c.id === selectedCharacter.value),
 );
+const selectedBodyPreset = computed(() => characterBodyPreset(character.value?.id));
 const masterCharacterIds = computed(() =>
   [
     ...new Set(
@@ -238,6 +244,7 @@ const characterForm = ref({
   flip: "false",
   order: "",
 });
+const formBodyPreset = computed(() => characterBodyPreset(characterForm.value.id));
 const hideCharacterForm = ref({ ...DEFAULT_CHARACTER_TRANSITION });
 const connected = ref(false);
 let noticeTimer,
@@ -256,15 +263,19 @@ function captureBaselines() {
   }
 }
 captureBaselines();
+function historySnapshot() {
+  return clone({
+    workbook: workbook.value,
+    tabId: tabId.value,
+    node: nodeName.value,
+    key: selectedKey.value,
+    navigation: navigation.value,
+    entryState: entryState.value,
+    nodeOrigin: nodeOrigin.value,
+  });
+}
 function checkpoint() {
-  undoStack.value.push(
-    clone({
-      workbook: workbook.value,
-      tabId: tabId.value,
-      node: nodeName.value,
-      key: selectedKey.value,
-    }),
-  );
+  undoStack.value.push(historySnapshot());
   if (undoStack.value.length > 40) undoStack.value.shift();
   redoStack.value = [];
 }
@@ -273,41 +284,71 @@ function restore(snapshot) {
   tabId.value = snapshot.tabId;
   nodeName.value = snapshot.node;
   selectedKey.value = snapshot.key;
-  navigation.value = [];
-  entryState.value = emptyStage();
+  navigation.value = snapshot.navigation;
+  entryState.value = snapshot.entryState;
+  nodeOrigin.value = snapshot.nodeOrigin;
 }
 function undo() {
   const s = undoStack.value.pop();
   if (!s) return;
-  redoStack.value.push(
-    clone({
-      workbook: workbook.value,
-      tabId: tabId.value,
-      node: nodeName.value,
-      key: selectedKey.value,
-    }),
-  );
+  redoStack.value.push(historySnapshot());
   restore(s);
 }
 function redo() {
   const s = redoStack.value.pop();
   if (!s) return;
-  undoStack.value.push(
-    clone({
-      workbook: workbook.value,
-      tabId: tabId.value,
-      node: nodeName.value,
-      key: selectedKey.value,
-    }),
-  );
+  undoStack.value.push(historySnapshot());
   restore(s);
 }
 watch(modal, async (value) => {
+  closeRowMenu();
   modalError.value = "";
   await nextTick();
   if (value && !dialog.value.open) dialog.value.showModal();
   else if (!value && dialog.value.open) dialog.value.close();
 });
+watch([tabId, nodeName], () => closeRowMenu());
+function openRowMenu(event, entry) {
+  if (isInstructionRow(entry.row)) return;
+  event.preventDefault();
+  rowMenuTrigger = event.currentTarget.querySelector(".line-select");
+  const rect = rowMenuTrigger.getBoundingClientRect();
+  rowMenu.value = {
+    key: entry.row.key,
+    x: event.type === "keydown" ? rect.left : event.clientX,
+    y: event.type === "keydown" ? rect.bottom : event.clientY,
+  };
+}
+function rowMenuKey(event, entry) {
+  if (event.key === "ContextMenu" || event.shiftKey && event.key === "F10")
+    openRowMenu(event, entry);
+}
+function closeRowMenu(restoreFocus = false) {
+  rowMenu.value = null;
+  if (restoreFocus) rowMenuTrigger?.focus();
+}
+function copyRowStatus() {
+  const at = lines.value.findIndex((entry) => entry.row.key === rowMenu.value?.key);
+  if (at < 0) return closeRowMenu();
+  copiedStatus.value = copySceneStatus(stateAt(lines.value.map((entry) => entry.row), at, entryState.value));
+  closeRowMenu(true);
+  notify("状態をコピーしました。貼り付け先の行を右クリックしてください。");
+}
+function pasteRowStatus() {
+  const row = lines.value.find((entry) => entry.row.key === rowMenu.value?.key)?.row;
+  if (!row || isInstructionRow(row) || !copiedStatus.value) return closeRowMenu();
+  try {
+    const raw = sceneStatusCommands(copiedStatus.value);
+    checkpoint();
+    row.command = raw;
+    selectedKey.value = row.key;
+    closeRowMenu(true);
+    notify("背景・立ち絵・BGM の状態を貼り付けました。演出を置き換えました。");
+  } catch (e) {
+    closeRowMenu(true);
+    error.value = e.message;
+  }
+}
 watch(
   () => [current.value?.key, current.value?.command],
   () => {
@@ -1160,6 +1201,7 @@ onBeforeUnmount(() => {
               <ArrowLeft :size="13" />分岐元へ
             </button>
           </div>
+          <small class="row-status-hint">右クリックで状態をコピー・貼り付け</small>
         </div>
         <div class="script-lines">
           <div
@@ -1172,6 +1214,8 @@ onBeforeUnmount(() => {
             }"
             @dragover.prevent
             @drop="reorderLine($event, entry)"
+            @contextmenu="openRowMenu($event, entry)"
+            @keydown="rowMenuKey($event, entry)"
           >
             <button
               class="line-grip"
@@ -1669,8 +1713,8 @@ onBeforeUnmount(() => {
               </p>
             </div>
             <div v-if="character" class="selected-character">
-              <small v-if="character.layered" class="toka-layer-note">
-                桃香の既定衣装（{{ character.bodyAsset }}）に「{{
+              <small v-if="character.layered" class="preset-layer-note">
+                {{ selectedBodyPreset.label }}の既定衣装（{{ character.bodyAsset }}）に「{{
                   character.faceAsset
                 }}」を重ねて表示しています。
               </small>
@@ -1679,8 +1723,8 @@ onBeforeUnmount(() => {
                 <div class="number-control">
                   <input
                     type="range"
-                    min="0"
-                    max="1"
+                    :min="CHARACTER_POSITION_MIN"
+                    :max="CHARACTER_POSITION_MAX"
                     step=".01"
                     :value="character.x"
                     @change="
@@ -1691,7 +1735,8 @@ onBeforeUnmount(() => {
                     "
                     aria-label="立ち絵の横位置"
                   /><span>{{ character.x.toFixed(2) }}</span>
-                </div></label
+                </div>
+                <small>0.5：中央。0未満でさらに左、1超でさらに右へ。</small></label
               >
               <div class="character-order-row">
                 <span>表示順 <small>{{ character.orderExplicit ? character.order : "自動" }}</small></span>
@@ -1840,30 +1885,31 @@ onBeforeUnmount(() => {
                 </option>
               </select></label
             ><small
-              v-if="isTokaCharacter(characterForm.id) && isTokaFaceAsset(characterForm.asset)"
-              class="inspector-note toka-layer-note"
-              >桃香の既定衣装（{{ TOKA_DEFAULT_BODY_ASSET }}）に、この表情を重ねます。</small
+              v-if="usesPresetBody(characterForm.id, characterForm.asset)"
+              class="inspector-note preset-layer-note"
+              >{{ formBodyPreset.label }}の既定衣装（{{ formBodyPreset.bodyAsset }}）に、この表情を重ねます。</small
             ><small
-              v-else-if="isTokaCharacter(characterForm.id) && characterForm.asset"
+              v-else-if="formBodyPreset && characterForm.asset"
               class="inspector-note"
-              >この画像を単体で表示します。桃香の衣装プリセットは使いません。</small
+              >この画像を単体で表示します。{{ formBodyPreset.label }}の衣装プリセットは使いません。</small
             ><label
               >横位置
               <div class="number-control">
                 <input
                   v-model.number="characterForm.x"
                   type="range"
-                  min="0"
-                  max="1"
+                  :min="CHARACTER_POSITION_MIN"
+                  :max="CHARACTER_POSITION_MAX"
                   step=".05"
                   aria-label="追加する立ち絵の位置"
                 /><input
                   v-model.number="characterForm.x"
                   type="number"
-                  min="0"
-                  max="1"
+                  :min="CHARACTER_POSITION_MIN"
+                  :max="CHARACTER_POSITION_MAX"
                   step=".05"
-                /></div></label
+                /></div>
+              <small>0.5：中央。0未満でさらに左、1超でさらに右へ。</small></label
             ><label
               >表示順（任意）<input
                 v-model="characterForm.order"
@@ -2248,4 +2294,16 @@ onBeforeUnmount(() => {
       "
     />
   </div>
+  <Teleport to="body">
+    <RowStatusMenu
+      v-if="rowMenu"
+      :key="`${rowMenu.key}:${rowMenu.x}:${rowMenu.y}`"
+      :x="rowMenu.x"
+      :y="rowMenu.y"
+      :can-paste="Boolean(copiedStatus)"
+      @copy="copyRowStatus"
+      @paste="pasteRowStatus"
+      @close="closeRowMenu"
+    />
+  </Teleport>
 </template>

@@ -61,6 +61,17 @@ test("flash is immediate and both effects start together with separate fixed dur
   assert.equal(effects.offsetFor(character), 0);
 });
 
+test("Peach temporary effects preserve the transformed body and face layer", () => {
+  const rows = [
+    { command: "[char:show:ピュアプリピーチ:Ch_Toka_Face_default:0.4:instant] [char:tint:ピュアプリピーチ:#805030:instant]" },
+    { command: "[char:flash:ピュアプリピーチ:#ff2040] [char:shake:ピュアプリピーチ:10]" },
+  ];
+  const expected = stateAt(rows, 0);
+  assert.deepEqual(stateAt(rows, 1), expected);
+  assert.equal(expected.characters[0].bodyAsset, "Ch_Toka_Body_TF");
+  assert.equal(expected.characters[0].faceAsset, "Ch_Toka_Face_default");
+});
+
 test("flash follows the expected authored color when it changes during the effect", async () => {
   const { tasks, effects } = harness(), character = actor();
   const flash = effects.start(command("[char:flash:toka:#ff0000]"), 1);

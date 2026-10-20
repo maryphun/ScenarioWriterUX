@@ -1,3 +1,6 @@
+export const CHARACTER_POSITION_MIN = -0.5;
+export const CHARACTER_POSITION_MAX = 1.5;
+
 const field = (key, label, type = "text", value = "", extra = {}) => ({
   key,
   label,
@@ -15,7 +18,11 @@ const color = (value = "black") => field("color", "色", "color", value);
 const volume = () =>
   field("volume", "音量", "number", "1", { min: 0, max: 1, step: 0.05 });
 const position = () =>
-  field("x", "横位置", "number", "0.5", { min: 0, max: 1, step: 0.05 });
+  field("x", "横位置", "number", "0.5", {
+    min: CHARACTER_POSITION_MIN,
+    max: CHARACTER_POSITION_MAX,
+    step: 0.05,
+  });
 const displayOrder = (optional = false) =>
   field("order", "表示順（0 が最前）", "number", optional ? "" : "0", {
     min: 0,
@@ -39,6 +46,7 @@ export const COMMANDS = [
     [asset("背景画像", "background"), duration(), color()],
     ["bg"],
   ),
+  spec("background:clear", "背景を消す", "背景", [duration()], ["bg:clear"]),
   spec(
     "char:show",
     "立ち絵を表示",
@@ -219,7 +227,9 @@ export function parseCommands(raw = "") {
         .split(/[:\s]+/)
         .filter(Boolean);
       const family = parts[0]?.toLowerCase();
-      const key = ["char", "bgm", "se", "fade", "dialogue"].includes(family)
+      const hasAction = ["char", "bgm", "se", "fade", "dialogue"].includes(family)
+        || ["background", "bg"].includes(family) && parts[1]?.toLowerCase() === "clear";
+      const key = hasAction
         ? `${family}:${parts[1]?.toLowerCase()}`
         : family;
       const definition =
@@ -332,6 +342,16 @@ export const seconds = (v) =>
   v === "instant" || v == null ? 0 : Math.max(0, Number(v) || 0);
 
 export const TOKA_DEFAULT_BODY_ASSET = "Ch_Toka_Body_Casual";
+export const PEACH_DEFAULT_BODY_ASSET = "Ch_Toka_Body_TF";
+
+const TOKA_BODY_PRESET = Object.freeze({
+  label: "桃香",
+  bodyAsset: TOKA_DEFAULT_BODY_ASSET,
+});
+const PEACH_BODY_PRESET = Object.freeze({
+  label: "ピュアプリピーチ",
+  bodyAsset: PEACH_DEFAULT_BODY_ASSET,
+});
 
 export function isTokaCharacter(characterId) {
   const id = String(characterId || "").trim().toLowerCase();
@@ -345,14 +365,20 @@ export function isTokaFaceAsset(assetName) {
     .startsWith("ch_toka_face_");
 }
 
-export function usesTokaPresetBody(characterId, assetName) {
-  return isTokaCharacter(characterId) && isTokaFaceAsset(assetName);
+export function characterBodyPreset(characterId) {
+  if (String(characterId || "").trim() === "ピュアプリピーチ")
+    return PEACH_BODY_PRESET;
+  return isTokaCharacter(characterId) ? TOKA_BODY_PRESET : null;
+}
+
+export function usesPresetBody(characterId, assetName) {
+  return Boolean(characterBodyPreset(characterId)) && isTokaFaceAsset(assetName);
 }
 
 function setCharacterAsset(character, assetName) {
   character.asset = assetName;
-  character.layered = usesTokaPresetBody(character.id, assetName);
-  character.bodyAsset = character.layered ? TOKA_DEFAULT_BODY_ASSET : "";
+  character.layered = usesPresetBody(character.id, assetName);
+  character.bodyAsset = character.layered ? characterBodyPreset(character.id).bodyAsset : "";
   character.faceAsset = character.layered ? assetName : "";
   return character;
 }
@@ -379,6 +405,7 @@ export function applyCommand(state, command) {
   const sameId = (c) => c.id.toLowerCase() === String(v.id).toLowerCase();
   const get = () => s.characters.find(sameId);
   if (key === "background") s.background = v.asset;
+  else if (key === "background:clear") s.background = "";
   else if (key === "char:show") {
     const previous = get();
     const character = setCharacterAsset({

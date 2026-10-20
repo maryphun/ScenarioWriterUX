@@ -57,13 +57,22 @@ test("Vue editor and existing command forms render with their saved values", asy
     assert.match(form, /value="saved_id"/);
     assert.match(form, /value="0.73"/);
     assert.match(form, /value="1.4"/);
+    for (const x of [-0.5, 1.5]) {
+      const extendedForm = await renderToString(
+        createSSRApp(CommandEditor, { initial: `[char:move:saved_id:${x}:instant]` }),
+      );
+      assert.match(extendedForm, /type="range"[^>]*min="-0\.5"[^>]*max="1\.5"/);
+      assert.match(extendedForm, /type="number"[^>]*min="-0\.5"[^>]*max="1\.5"/);
+      assert.ok(extendedForm.includes(`value="${x}"`));
+    }
     const suggestedForm = await renderToString(
       createSSRApp(CommandEditor, {
         preset: "char:show",
-        characterIds: ["白崎桃香", "宮森楓"],
+        characterIds: ["白崎桃香", "ピュアプリピーチ", "宮森楓"],
       }),
     );
     assert.match(suggestedForm, /value="白崎桃香"/);
+    assert.match(suggestedForm, /value="ピュアプリピーチ"/);
     assert.match(suggestedForm, /value="宮森楓"/);
     assert.match(suggestedForm, /表示順（0 が最前）/);
     const flashForm = await renderToString(createSSRApp(CommandEditor, { initial: "[char:flash:白崎桃香:#ff2040]" }));

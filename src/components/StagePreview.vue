@@ -334,8 +334,8 @@ async function play() {
       d = seconds(v.duration);
     await playAudio(c, state, token);
     if (token !== generation) break;
-    if (c.canonical === "background" && d) {
-      backgroundFade.value.color = v.color;
+    if (["background", "background:clear"].includes(c.canonical) && d) {
+      backgroundFade.value.color = v.color || "black";
       await tween(d / 2, token, (p) => {
         backgroundFade.value.opacity = p;
       });

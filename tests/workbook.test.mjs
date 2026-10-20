@@ -175,6 +175,20 @@ test("Yarn export keeps Toka face commands profile-driven", () => {
   );
   assert.doesNotMatch(yarn, /Ch_Toka_Body_Casual/);
 });
+test("Yarn export keeps Peach face commands without baking the preview body into the script", () => {
+  const w = fixtureWorkbook();
+  w.tabs[0].rows[0].command =
+    "[char:show:ピュアプリピーチ:Ch_Toka_Face_default:0.5:0.5:false] [char:face:ピュアプリピーチ:Ch_Toka_Face_angry:0.2]";
+  const yarn = exportYarn(w, parseCommands);
+  const payload = yarn.match(/^<<dialogue_stage "([^"]+)">>$/m)[1];
+  const sequence = JSON.parse(Buffer.from(payload, "base64").toString("utf8"));
+  assert.deepEqual(sequence.commands, [
+    {kind:"char",args:["show","ピュアプリピーチ","Ch_Toka_Face_default","0.5","0.5","false"]},
+    {kind:"char",args:["face","ピュアプリピーチ","Ch_Toka_Face_angry","0.2"]},
+  ]);
+  assert.doesNotMatch(JSON.stringify(sequence), /Ch_Toka_Body_TF/);
+});
+
 test("change review counts implicit node assignments explicitly", () => {
   const rows = [
     ["Start", "", "", "Hello"],

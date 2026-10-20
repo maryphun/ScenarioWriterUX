@@ -54,6 +54,41 @@ summary:focus-visible {
 button:focus:not(:focus-visible) {
   outline: none;
 }
+.row-status-hint {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.row-status-menu {
+  position: fixed;
+  z-index: 100;
+  width: 220px;
+  max-width: calc(100vw - 16px);
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.row-status-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  text-align: left;
+}
+.row-status-menu button:hover:not(:disabled),
+.row-status-menu button:focus-visible {
+  background: var(--active);
+}
+.row-status-menu button:focus-visible {
+  outline-offset: -2px;
+}
 button,
 select {
   touch-action: manipulation;
@@ -1017,7 +1052,7 @@ fieldset {
 .character-order-row .button {
   min-width: 72px;
 }
-.toka-layer-note {
+.preset-layer-note {
   display: block;
   margin: 0 0 12px;
   padding: 9px 10px;
@@ -1027,7 +1062,7 @@ fieldset {
   color: var(--muted);
   line-height: 1.55;
 }
-.inspector-note.toka-layer-note {
+.inspector-note.preset-layer-note {
   margin-top: -3px;
 }
 .character-removal-group {
@@ -1488,12 +1523,17 @@ fieldset {
   }
   .node-picker {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 15px;
+    gap: 6px 15px;
   }
   .node-picker > .scene-selector {
     flex: 1;
     min-width: 0;
+  }
+  .node-picker > .row-status-hint {
+    flex-basis: 100%;
+    margin-top: 0;
   }
   .top-actions > .button {
     font-size: 12px;

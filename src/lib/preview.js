@@ -1,4 +1,8 @@
-import { isTokaCharacter } from "./commands.js";
+import {
+  isTokaCharacter,
+  CHARACTER_POSITION_MIN,
+  CHARACTER_POSITION_MAX,
+} from "./commands.js";
 
 export const DEFAULT_PREVIEW_OPTIONS = Object.freeze({
   characterHeight: 1.3,
@@ -26,7 +30,10 @@ export function characterCenterX(
   stageWidth = PREVIEW_STAGE_WIDTH,
 ) {
   const { left, right } = characterPositionBounds(characterWidth, stageWidth);
-  return left + (right - left) * Math.max(0, Math.min(1, position));
+  return left + (right - left) * Math.max(
+    CHARACTER_POSITION_MIN,
+    Math.min(CHARACTER_POSITION_MAX, position),
+  );
 }
 
 export function characterPositionFromCenter(
@@ -35,7 +42,10 @@ export function characterPositionFromCenter(
   stageWidth = PREVIEW_STAGE_WIDTH,
 ) {
   const { left, right } = characterPositionBounds(characterWidth, stageWidth);
-  return Math.max(0, Math.min(1, (center - left) / (right - left)));
+  return Math.max(
+    CHARACTER_POSITION_MIN,
+    Math.min(CHARACTER_POSITION_MAX, (center - left) / (right - left)),
+  );
 }
 
 export function isNonSpeakingCharacter(characterId, speakerName) {
