@@ -31,6 +31,8 @@ import {
   EyeOff,
   Minimize2,
   Maximize2,
+  FolderOpen,
+  Search,
 } from "lucide-vue-next";
 import StagePreview from "./components/StagePreview.vue";
 import CommandEditor from "./components/CommandEditor.vue";
@@ -50,6 +52,7 @@ import {
   validateValues,
   COLOR_NAMES,
   characterBodyPreset,
+  isTokaFaceAsset,
   usesPresetBody,
 } from "./lib/commands.js";
 import {
@@ -90,6 +93,7 @@ import {
 } from "./lib/storage.js";
 import { request, DEFAULT_API_URL } from "./lib/api.js";
 import { DEFAULT_PREVIEW_OPTIONS } from "./lib/preview.js";
+import { GRAPHIC_FOLDERS, scanGraphicFolder } from "./lib/graphic-folder.js";
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const workbook = ref(emptyWorkbook()),
@@ -99,6 +103,7 @@ const workbook = ref(emptyWorkbook()),
 const baseline = ref({}),
   baselineSignatures = ref({}),
   assets = ref([]),
+  projectAssets = ref([]),
   message = ref(""),
   error = ref(""),
   busy = ref(false),
@@ -116,6 +121,7 @@ const panel = ref("background"),
   textInput = ref(),
   instructionInput = ref(),
   fileInput = ref(),
+  graphicInput = ref(),
   backupInput = ref(),
   uploadKind = ref("background");
 const commandInitial = ref(""),
@@ -203,17 +209,26 @@ const backgroundForm = ref({
   color: "black",
 });
 const compactPreview = ref(false);
+const graphicCounts = ref(null);
+const graphicError = ref("");
+const catalog = computed(() => {
+  const projectNames = new Set(projectAssets.value.map((asset) => asset.name.toLowerCase()));
+  return [
+    ...projectAssets.value,
+    ...assets.value.filter((asset) => !projectNames.has(asset.name.toLowerCase())),
+  ];
+});
 const bgAssets = computed(() =>
-  assets.value.filter((a) => a.kind === "background"),
+  catalog.value.filter((a) => a.kind === "background"),
 );
 const spriteAssets = computed(() =>
-  assets.value.filter((a) => a.kind === "sprite"),
+  catalog.value.filter((a) => a.kind === "sprite"),
 );
 const backgroundAsset = computed(() =>
-  assets.value.find((a) => a.name === backgroundForm.value.asset),
+  bgAssets.value.find((a) => a.name === backgroundForm.value.asset),
 );
 const assetUrl = (name) =>
-  assets.value.find(
+  catalog.value.find(
     (a) => a.name.toLowerCase() === String(name || "").toLowerCase(),
   )?.url || "";
 const character = computed(() =>
@@ -237,7 +252,7 @@ const characterIdOptions = computed(() =>
     ]),
   ],
 );
-const characterForm = ref({
+const defaultCharacterForm = () => ({
   id: "",
   asset: "",
   x: 0.5,
@@ -246,6 +261,16 @@ const characterForm = ref({
   order: "",
   initialTint: "",
 });
+const characterForm = ref(defaultCharacterForm());
+const characterMode = ref("edit");
+const characterAddError = ref("");
+const spriteQuery = ref("");
+const addSprite = computed(() => spriteAssets.value.find((a) => a.name === characterForm.value.asset));
+const filteredSprites = computed(() => {
+  const query = spriteQuery.value.trim().toLowerCase();
+  return spriteAssets.value.filter((asset) => asset.name.toLowerCase().includes(query));
+});
+const occupiedCharacterId = computed(() => isVisibleCharacterId(characterForm.value.id));
 const formBodyPreset = computed(() => characterBodyPreset(characterForm.value.id));
 const hideCharacterForm = ref({ ...DEFAULT_CHARACTER_TRANSITION });
 const connected = ref(false);
@@ -559,7 +584,8 @@ function applyBackground() {
 }
 function addCharacter() {
   const characterId = characterForm.value.id.trim();
-  if (!characterId) return;
+  if (!current.value || currentIsInstruction.value || !characterId || !addSprite.value || occupiedCharacterId.value)
+    return;
   try {
     setCommand(
       buildCommand("char:show", {
@@ -568,13 +594,31 @@ function addCharacter() {
         duration: transitionDuration(characterForm.value),
       }),
     );
-    characterForm.value.id = characterId;
-    characterForm.value.initialTint = "";
-    selectedCharacter.value = characterId;
+    characterForm.value = defaultCharacterForm();
+    characterAddError.value = "";
+    editVisibleCharacter(characterId);
     notify("立ち絵を追加しました。");
   } catch (e) {
-    error.value = e.message;
+    characterAddError.value = e.message;
   }
+}
+function isVisibleCharacterId(id) {
+  const key = id.trim().toLowerCase();
+  return after.value.characters.some((item) => item.id.toLowerCase() === key);
+}
+function editVisibleCharacter(id) {
+  selectedCharacter.value = id;
+  characterMode.value = "edit";
+  panel.value = "characters";
+}
+function openSpritePicker() {
+  spriteQuery.value = "";
+  modal.value = "sprite-picker";
+}
+function selectAddSprite(asset) {
+  characterForm.value.asset = asset.name;
+  characterAddError.value = "";
+  modal.value = "";
 }
 function hideCharacter() {
   if (!character.value) return;
@@ -682,6 +726,10 @@ function returnNode() {
   entryState.value = previous.initial;
 }
 async function connect() {
+  if (!graphicCounts.value) {
+    graphicError.value = "先に Assets/Graphic を選択してください。";
+    return;
+  }
   busy.value = true;
   modalError.value = "";
   try {
@@ -778,6 +826,32 @@ function chooseFiles(kind) {
     : "audio/*";
   fileInput.value.click();
 }
+function pickGraphicFolder() {
+  if (!("webkitdirectory" in graphicInput.value)) {
+    graphicError.value = "フォルダー選択に対応したブラウザーで開いてください。";
+    return;
+  }
+  graphicInput.value.click();
+}
+function loadGraphicFolder(event) {
+  const input = event.target;
+  if (!input.files.length) return;
+  graphicError.value = "";
+  try {
+    const { counts, records } = scanGraphicFolder(input.files);
+    const next = records.map(({ file, ...asset }) => ({
+      ...asset,
+      url: URL.createObjectURL(file),
+    }));
+    projectAssets.value.forEach((asset) => URL.revokeObjectURL(asset.url));
+    projectAssets.value = next;
+    graphicCounts.value = counts;
+  } catch (e) {
+    graphicError.value = e.message;
+  } finally {
+    input.value = "";
+  }
+}
 async function importFiles(files, kind) {
   error.value = "";
   for (const file of files) {
@@ -794,7 +868,7 @@ async function importFiles(files, kind) {
       continue;
     }
     const name = file.name.replace(/\.[^.]+$/, "").replace(/[\s:\[\]<>]/g, "_");
-    if (assets.value.some((a) => a.name.toLowerCase() === name.toLowerCase())) {
+    if (catalog.value.some((a) => a.name.toLowerCase() === name.toLowerCase())) {
       error.value = `「${name}」は登録済みです。別名のファイルを選んでください。`;
       continue;
     }
@@ -811,7 +885,6 @@ async function importFiles(files, kind) {
       const item = { ...record, url: URL.createObjectURL(file) };
       assets.value.push(item);
       if (kind === "background") backgroundForm.value.asset = name;
-      if (kind === "sprite") characterForm.value.asset = name;
     } catch (e) {
       error.value = "素材の保存に失敗しました：" + e.message;
     }
@@ -828,16 +901,13 @@ function useAsset(asset) {
     applyBackground();
   } else if (asset.kind === "sprite") {
     panel.value = "characters";
+    characterMode.value = "add";
+    characterAddError.value = "";
     characterForm.value.asset = asset.name;
-    characterForm.value.id =
-      asset.characterId || "character_" + (after.value.characters.length + 1);
-    openCommand(
-      "char:show",
-      buildCommand("char:show", {
-        ...characterForm.value,
-        duration: transitionDuration(characterForm.value),
-      }),
-    );
+    if (asset.characterId && !isVisibleCharacterId(asset.characterId))
+      characterForm.value.id = asset.characterId;
+  } else if (asset.kind === "cg") {
+    editAsset(asset);
   } else
     openCommand(
       asset.kind === "bgm" ? "bgm:play" : "se:play",
@@ -848,7 +918,7 @@ function useAsset(asset) {
 }
 function editAsset(asset) {
   assetEditing.value = { ...asset };
-  modal.value = "asset";
+  modal.value = asset.projectFolder ? "asset-preview" : "asset";
 }
 function validateAsset() {
   const a = assetEditing.value;
@@ -1101,6 +1171,7 @@ onMounted(async () => {
 });
 onBeforeUnmount(() => {
   assets.value.forEach((a) => URL.revokeObjectURL(a.url));
+  projectAssets.value.forEach((a) => URL.revokeObjectURL(a.url));
   window.removeEventListener("keydown", shortcut);
   window.removeEventListener("beforeunload", beforeUnload);
 });
@@ -1331,15 +1402,12 @@ onBeforeUnmount(() => {
             :row="current"
             :instruction="currentIsInstruction"
             :choices="choices"
-            :assets="assets"
+            :assets="catalog"
             :speakers="workbook.speakers"
             :options="previewOptions"
             @choice="followChoice"
             @move-character="moveCharacter"
-            @select-character="
-              selectedCharacter = $event;
-              panel = 'characters';
-            "
+            @select-character="editVisibleCharacter"
             @message="notify"
           />
           <div v-else class="empty-preview">
@@ -1686,278 +1754,298 @@ onBeforeUnmount(() => {
             </button>
           </section>
           <section v-else-if="panel === 'characters'">
-            <div class="panel-heading">
-              <h2>表示中の立ち絵</h2>
-              <span class="meta">{{ after.characters.length }}</span>
-            </div>
-            <div class="character-list">
+            <div class="segmented character-mode" role="group" aria-label="立ち絵の操作">
               <button
-                v-for="c in orderedCharacters(after.characters).reverse()"
-                :key="c.id"
-                class="character-item"
-                :class="{ active: selectedCharacter === c.id }"
-                @click="selectedCharacter = c.id"
-              >
-                <div
-                  v-if="c.layered && (assetUrl(c.bodyAsset) || assetUrl(c.faceAsset))"
-                  class="character-thumb layered"
-                  aria-hidden="true"
-                >
-                  <img v-if="assetUrl(c.bodyAsset)" :src="assetUrl(c.bodyAsset)" alt="" />
-                  <img v-if="assetUrl(c.faceAsset)" :src="assetUrl(c.faceAsset)" alt="" />
-                </div>
-                <img v-else-if="assetUrl(c.asset)" :src="assetUrl(c.asset)" alt="" />
-                <Users v-else :size="18" /><span
-                  >{{ c.id }}<small>{{ c.asset }}</small></span
-                >
-              </button>
-              <p v-if="!after.characters.length" class="meta">
-                この行には立ち絵がありません。
-              </p>
+                type="button"
+                :class="{ active: characterMode === 'edit' }"
+                :aria-pressed="characterMode === 'edit'"
+                @click="characterMode = 'edit'"
+              >表示中を編集</button>
+              <button
+                type="button"
+                :class="{ active: characterMode === 'add' }"
+                :aria-pressed="characterMode === 'add'"
+                @click="characterMode = 'add'"
+              >新しく追加</button>
             </div>
-            <div v-if="character" class="selected-character">
-              <small v-if="character.layered" class="preset-layer-note">
-                {{ selectedBodyPreset.label }}の既定衣装（{{ character.bodyAsset }}）に「{{
-                  character.faceAsset
-                }}」を重ねて表示しています。
-              </small>
-              <label
-                >横位置
-                <div class="number-control">
-                  <input
-                    type="range"
-                    :min="CHARACTER_POSITION_MIN"
-                    :max="CHARACTER_POSITION_MAX"
-                    step=".01"
-                    :value="character.x"
-                    @change="
-                      moveCharacter({
-                        id: character.id,
-                        x: Number($event.target.value),
-                      })
+            <template v-if="characterMode === 'edit'">
+              <div class="panel-heading">
+                <h2>表示中の立ち絵</h2>
+                <span class="meta">{{ after.characters.length }}</span>
+              </div>
+              <div class="character-list">
+                <button
+                  v-for="c in orderedCharacters(after.characters).reverse()"
+                  :key="c.id"
+                  class="character-item"
+                  :class="{ active: selectedCharacter === c.id }"
+                  :aria-pressed="selectedCharacter === c.id"
+                  @click="editVisibleCharacter(c.id)"
+                >
+                  <div
+                    v-if="c.layered && (assetUrl(c.bodyAsset) || assetUrl(c.faceAsset))"
+                    class="character-thumb layered"
+                    aria-hidden="true"
+                  >
+                    <img v-if="assetUrl(c.bodyAsset)" :src="assetUrl(c.bodyAsset)" alt="" />
+                    <img v-if="assetUrl(c.faceAsset)" :src="assetUrl(c.faceAsset)" alt="" />
+                  </div>
+                  <img v-else-if="assetUrl(c.asset)" :src="assetUrl(c.asset)" alt="" />
+                  <Users v-else :size="18" /><span
+                    >{{ c.id }}<small>{{ c.asset }}</small></span
+                  >
+                </button>
+                <p v-if="!after.characters.length" class="meta">
+                  この行には立ち絵がありません。
+                </p>
+              </div>
+              <div v-if="character" class="selected-character">
+                <h3 class="character-edit-target">編集中 <strong>{{ character.id }}</strong></h3>
+                <small v-if="character.layered" class="preset-layer-note">
+                  {{ selectedBodyPreset.label }}の既定衣装（{{ character.bodyAsset }}）に「{{
+                    character.faceAsset
+                  }}」を重ねて表示しています。
+                </small>
+                <label
+                  >横位置
+                  <div class="number-control">
+                    <input
+                      type="range"
+                      :min="CHARACTER_POSITION_MIN"
+                      :max="CHARACTER_POSITION_MAX"
+                      step=".01"
+                      :value="character.x"
+                      @change="
+                        moveCharacter({
+                          id: character.id,
+                          x: Number($event.target.value),
+                        })
+                      "
+                      aria-label="立ち絵の横位置"
+                    /><span>{{ character.x.toFixed(2) }}</span>
+                  </div>
+                  <small>0.5：中央。0未満でさらに左、1超でさらに右へ。</small></label
+                >
+                <div class="character-order-row">
+                  <span>表示順 <small>{{ character.orderExplicit ? character.order : "自動" }}</small></span>
+                  <button
+                    class="button"
+                    @click="
+                      openCommand(
+                        'char:order',
+                        buildCommand('char:order', {
+                          id: character.id,
+                          order: character.order,
+                        }),
+                      )
                     "
-                    aria-label="立ち絵の横位置"
-                  /><span>{{ character.x.toFixed(2) }}</span>
+                  >変更</button>
                 </div>
-                <small>0.5：中央。0未満でさらに左、1超でさらに右へ。</small></label
-              >
-              <div class="character-order-row">
-                <span>表示順 <small>{{ character.orderExplicit ? character.order : "自動" }}</small></span>
-                <button
-                  class="button"
-                  @click="
-                    openCommand(
-                      'char:order',
-                      buildCommand('char:order', {
-                        id: character.id,
-                        order: character.order,
-                      }),
-                    )
-                  "
-                >変更</button>
+                <div class="two-buttons">
+                  <button
+                    class="button"
+                    @click="
+                      openCommand(
+                        'char:face',
+                        buildCommand('char:face', {
+                          id: character.id,
+                          asset: character.asset,
+                        }),
+                      )
+                    "
+                  >
+                    表情</button
+                  ><button
+                    class="button"
+                    @click="
+                      openCommand(
+                        'char:scale',
+                        buildCommand('char:scale', {
+                          id: character.id,
+                          scale: character.scale,
+                        }),
+                      )
+                    "
+                  >
+                    サイズ</button
+                  ><button
+                    class="button"
+                    @click="
+                      setCommand(
+                        buildCommand('char:flip', {
+                          id: character.id,
+                          flip: String(!character.flip),
+                        }),
+                      )
+                    "
+                  >
+                    左右反転</button
+                  ><button
+                    class="button"
+                    @click="
+                      openCommand(
+                        'char:tint',
+                        buildCommand('char:tint', {
+                          id: character.id,
+                          color: character.tint,
+                        }),
+                      )
+                    "
+                  >
+                    色
+                  </button>
+                  <button
+                    class="button"
+                    @click="openCommand('char:flash', buildCommand('char:flash', { id: character.id }))"
+                  >
+                    一瞬着色
+                  </button>
+                  <button
+                    class="button"
+                    @click="openCommand('char:shake', buildCommand('char:shake', { id: character.id }))"
+                  >
+                    横に揺らす
+                  </button>
+                </div>
+                <div class="character-removal-group">
+                  <h3>非表示の設定</h3>
+                  <fieldset class="transition-fields character-transition">
+                    <legend>切り替え</legend>
+                    <div class="segmented">
+                      <button
+                        type="button"
+                        :class="{ active: hideCharacterForm.mode === 'instant' }"
+                        @click="hideCharacterForm.mode = 'instant'"
+                      >
+                        即時</button
+                      ><button
+                        type="button"
+                        :class="{ active: hideCharacterForm.mode === 'fade' }"
+                        @click="hideCharacterForm.mode = 'fade'"
+                      >
+                        フェード
+                      </button>
+                    </div>
+                  </fieldset>
+                  <label v-if="hideCharacterForm.mode === 'fade'"
+                    >フェード時間（秒）<input
+                      v-model.number="hideCharacterForm.time"
+                      type="number"
+                      min="0"
+                      step="0.1" /></label
+                  >
+                  <div class="character-hide-action">
+                    <button
+                      type="button"
+                      class="button character-hide-button"
+                      @click="hideCharacter"
+                    >
+                      <EyeOff :size="15" />この行から非表示
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div class="two-buttons">
-                <button
-                  class="button"
-                  @click="
-                    openCommand(
-                      'char:face',
-                      buildCommand('char:face', {
-                        id: character.id,
-                        asset: character.asset,
-                      }),
-                    )
-                  "
-                >
-                  表情</button
-                ><button
-                  class="button"
-                  @click="
-                    openCommand(
-                      'char:scale',
-                      buildCommand('char:scale', {
-                        id: character.id,
-                        scale: character.scale,
-                      }),
-                    )
-                  "
-                >
-                  サイズ</button
-                ><button
-                  class="button"
-                  @click="
-                    setCommand(
-                      buildCommand('char:flip', {
-                        id: character.id,
-                        flip: String(!character.flip),
-                      }),
-                    )
-                  "
-                >
-                  左右反転</button
-                ><button
-                  class="button"
-                  @click="
-                    openCommand(
-                      'char:tint',
-                      buildCommand('char:tint', {
-                        id: character.id,
-                        color: character.tint,
-                      }),
-                    )
-                  "
-                >
-                  色
-                </button>
-                <button
-                  class="button"
-                  @click="openCommand('char:flash', buildCommand('char:flash', { id: character.id }))"
-                >
-                  一瞬着色
-                </button>
-                <button
-                  class="button"
-                  @click="openCommand('char:shake', buildCommand('char:shake', { id: character.id }))"
-                >
-                  横に揺らす
-                </button>
-              </div>
-              <div class="character-removal-group">
-                <h3>非表示の設定</h3>
-                <fieldset class="transition-fields character-transition">
-                  <legend>切り替え</legend>
+            </template>
+            <form v-else class="character-add-form" @submit.prevent="addCharacter">
+              <div class="panel-heading"><h2>立ち絵を追加</h2></div>
+              <p v-if="!current" class="meta">追加するセリフの行を選択してください。</p>
+              <button type="button" class="button full sprite-picker-trigger" @click="openSpritePicker">
+                <img v-if="addSprite" :src="addSprite.url" alt="" />
+                <ImagePlus v-else :size="18" />
+                <span>{{ addSprite?.name || "立ち絵を選ぶ" }}</span>
+                <ChevronDown :size="15" />
+              </button>
+              <label
+                >キャラクター ID<input
+                  v-model="characterForm.id"
+                  list="master-character-ids"
+                  placeholder="名前を入力 / 選択"
+                  :aria-invalid="occupiedCharacterId"
+                  @input="characterAddError = ''"
+                  autocomplete="off" /><datalist id="master-character-ids">
+                  <option
+                    v-for="name in masterCharacterIds"
+                    :key="name"
+                    :value="name"
+                  />
+                </datalist></label
+              ><p v-if="occupiedCharacterId" class="error" role="status">
+                この ID は表示中です。「表示中を編集」で選ぶか、新しい ID を入力してください。
+              </p
+              ><small
+                v-if="usesPresetBody(characterForm.id, characterForm.asset)"
+                class="inspector-note preset-layer-note"
+                >{{ formBodyPreset.label }}の既定衣装（{{ formBodyPreset.bodyAsset }}）に、この表情を重ねます。</small
+              ><small
+                v-else-if="formBodyPreset && characterForm.asset"
+                class="inspector-note"
+                >この画像を単体で表示します。{{ formBodyPreset.label }}の衣装プリセットは使いません。</small
+              ><details class="character-add-settings">
+                <summary>表示の詳細設定</summary>
+                <InitialTintField v-model="characterForm.initialTint" />
+                <label
+                  >横位置
+                  <div class="number-control">
+                    <input
+                      v-model.number="characterForm.x"
+                      type="range"
+                      :min="CHARACTER_POSITION_MIN"
+                      :max="CHARACTER_POSITION_MAX"
+                      step=".05"
+                      aria-label="追加する立ち絵の位置"
+                    /><input
+                      v-model.number="characterForm.x"
+                      type="number"
+                      :min="CHARACTER_POSITION_MIN"
+                      :max="CHARACTER_POSITION_MAX"
+                      step=".05"
+                    /></div>
+                  <small>0.5：中央。0未満でさらに左、1超でさらに右へ。</small></label
+                ><label
+                  >表示順（任意）<input
+                    v-model="characterForm.order"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="自動"
+                  /><small>0 が最前。1 は 0 の後ろです。</small></label
+                ><fieldset class="transition-fields character-transition">
+                  <legend>表示の切り替え</legend>
                   <div class="segmented">
                     <button
                       type="button"
-                      :class="{ active: hideCharacterForm.mode === 'instant' }"
-                      @click="hideCharacterForm.mode = 'instant'"
+                      :class="{ active: characterForm.mode === 'instant' }"
+                      @click="characterForm.mode = 'instant'"
                     >
                       即時</button
                     ><button
                       type="button"
-                      :class="{ active: hideCharacterForm.mode === 'fade' }"
-                      @click="hideCharacterForm.mode = 'fade'"
+                      :class="{ active: characterForm.mode === 'fade' }"
+                      @click="characterForm.mode = 'fade'"
                     >
                       フェード
                     </button>
                   </div>
                 </fieldset>
-                <label v-if="hideCharacterForm.mode === 'fade'"
+                <label v-if="characterForm.mode === 'fade'"
                   >フェード時間（秒）<input
-                    v-model.number="hideCharacterForm.time"
+                    v-model.number="characterForm.time"
                     type="number"
                     min="0"
                     step="0.1" /></label
                 >
-                <div class="character-hide-action">
-                  <button
-                    type="button"
-                    class="button character-hide-button"
-                    @click="hideCharacter"
-                  >
-                    <EyeOff :size="15" />この行から非表示
-                  </button>
-                </div>
-              </div>
-            </div>
-            <h3 class="section-subtitle">立ち絵を追加</h3>
-            <button
-              class="asset-drop compact-drop"
-              @click="chooseFiles('sprite')"
-              @dragover.prevent
-              @drop="dropFiles($event, 'sprite')"
-            >
-              <ImagePlus :size="20" /><span>画像をドロップ / 選択</span></button
-            ><label
-              >キャラクター ID<input
-                v-model="characterForm.id"
-                list="master-character-ids"
-                placeholder="名前を入力 / 選択"
-                autocomplete="off" /><datalist id="master-character-ids">
-                <option
-                  v-for="name in masterCharacterIds"
-                  :key="name"
-                  :value="name"
-                />
-              </datalist></label
-            ><label
-              >立ち絵<select v-model="characterForm.asset">
-                <option value="">画像を選択</option>
-                <option v-for="a in spriteAssets" :key="a.id" :value="a.name">
-                  {{ a.name }}
-                </option>
-              </select></label
-            ><small
-              v-if="usesPresetBody(characterForm.id, characterForm.asset)"
-              class="inspector-note preset-layer-note"
-              >{{ formBodyPreset.label }}の既定衣装（{{ formBodyPreset.bodyAsset }}）に、この表情を重ねます。</small
-            ><small
-              v-else-if="formBodyPreset && characterForm.asset"
-              class="inspector-note"
-              >この画像を単体で表示します。{{ formBodyPreset.label }}の衣装プリセットは使いません。</small
-            ><label
-              >横位置
-              <div class="number-control">
-                <input
-                  v-model.number="characterForm.x"
-                  type="range"
-                  :min="CHARACTER_POSITION_MIN"
-                  :max="CHARACTER_POSITION_MAX"
-                  step=".05"
-                  aria-label="追加する立ち絵の位置"
-                /><input
-                  v-model.number="characterForm.x"
-                  type="number"
-                  :min="CHARACTER_POSITION_MIN"
-                  :max="CHARACTER_POSITION_MAX"
-                  step=".05"
-                /></div>
-              <small>0.5：中央。0未満でさらに左、1超でさらに右へ。</small></label
-            ><label
-              >表示順（任意）<input
-                v-model="characterForm.order"
-                type="number"
-                min="0"
-                step="1"
-                placeholder="自動"
-              /><small>0 が最前。1 は 0 の後ろです。</small></label
-            ><InitialTintField v-model="characterForm.initialTint" />
-            <fieldset class="transition-fields character-transition">
-              <legend>表示の切り替え</legend>
-              <div class="segmented">
-                <button
-                  type="button"
-                  :class="{ active: characterForm.mode === 'instant' }"
-                  @click="characterForm.mode = 'instant'"
-                >
-                  即時</button
-                ><button
-                  type="button"
-                  :class="{ active: characterForm.mode === 'fade' }"
-                  @click="characterForm.mode = 'fade'"
-                >
-                  フェード
-                </button>
-              </div>
-            </fieldset>
-            <label v-if="characterForm.mode === 'fade'"
-              >フェード時間（秒）<input
-                v-model.number="characterForm.time"
-                type="number"
-                min="0"
-                step="0.1" /></label
-            ><button
-              class="button primary full"
-              :disabled="
-                !current || !characterForm.id.trim() || !characterForm.asset
-              "
-              @click="addCharacter"
-            >
-              <Plus :size="15" />この行に追加</button
-            ><small class="inspector-note"
-              >別の立ち絵は別の ID で追加します。同じ ID
-              は表示を更新します。</small
-            >
+              </details>
+              <p v-if="characterAddError" class="error" role="alert">{{ characterAddError }}</p>
+              <button
+                class="button primary full"
+                :disabled="
+                  !current || !characterForm.id.trim() || !addSprite || occupiedCharacterId
+                "
+                type="submit"
+              >
+                <Plus :size="15" />この行に追加
+              </button>
+            </form>
           </section>
           <section v-else-if="panel === 'commands'">
             <div class="panel-heading"><h2>演出コマンド</h2></div>
@@ -2005,6 +2093,20 @@ onBeforeUnmount(() => {
             >
               <Cloud :size="14" />共有素材を読み込む
             </button>
+            <details v-if="projectAssets.length" class="project-asset-library">
+              <summary>PC の素材 <small>{{ projectAssets.length }} 件</small></summary>
+              <div class="asset-library">
+                <article v-for="a in projectAssets" :key="a.id">
+                  <button class="asset-thumbnail" @click="useAsset(a)" :aria-label="a.name">
+                    <img :src="a.url" alt="" loading="lazy" />
+                  </button>
+                  <button class="asset-description" @click="editAsset(a)">
+                    <strong>{{ a.name }}</strong>
+                    <small>{{ a.projectFolder }}</small>
+                  </button>
+                </article>
+              </div>
+            </details>
             <div class="asset-library">
               <article
                 v-for="a in assets"
@@ -2077,14 +2179,18 @@ onBeforeUnmount(() => {
     <dialog
       ref="dialog"
       class="app-dialog"
+      :class="{ 'sprite-picker-dialog': modal === 'sprite-picker' }"
+      aria-labelledby="app-dialog-title"
       @cancel.prevent="!busy && (modal = '')"
       @close="modal = ''"
     >
       <div class="dialog-heading">
-        <h2>
+        <h2 id="app-dialog-title">
           {{
             {
               connect: "スプレッドシート接続",
+              "sprite-picker": "立ち絵を選ぶ",
+              "asset-preview": assetEditing?.name,
               command: "演出を設定",
               node:
                 nodeForm.mode === "rename"
@@ -2112,12 +2218,54 @@ onBeforeUnmount(() => {
         :key="commandPreset + commandInitial"
         :initial="commandInitial"
         :preset="commandPreset"
-        :assets="assets"
+        :assets="catalog"
         :character-ids="characterIdOptions"
         @save="saveCommand"
         @cancel="modal = ''"
       />
-      <form v-if="modal === 'connect'" @submit.prevent="connect">
+      <div v-if="modal === 'sprite-picker'" class="sprite-picker">
+        <label class="sprite-search">
+          <span>素材名で検索</span>
+          <span class="sprite-search-input"><Search :size="17" /><input v-model="spriteQuery" type="search" placeholder="例：Ch_Toka" autofocus /></span>
+        </label>
+        <p v-if="!spriteAssets.length" class="muted">接続設定で Assets/Graphic を選ぶと、立ち絵がここに表示されます。</p>
+        <p v-else-if="!filteredSprites.length" class="muted">該当する立ち絵がありません。</p>
+        <div v-else class="sprite-grid" aria-label="登録済みの立ち絵">
+          <button
+            v-for="asset in filteredSprites"
+            :key="asset.id"
+            type="button"
+            class="sprite-option"
+            :aria-pressed="asset.name === characterForm.asset"
+            @click="selectAddSprite(asset)"
+          >
+            <span class="sprite-option-image" :class="{ 'face-detail': isTokaFaceAsset(asset.name) }">
+              <img :src="asset.url" alt="" loading="lazy" />
+            </span>
+            <span class="sprite-option-name">{{ asset.name }}</span>
+          </button>
+        </div>
+      </div>
+      <div v-if="modal === 'asset-preview' && assetEditing">
+        <img class="project-asset-preview" :src="assetEditing.url" :alt="assetEditing.name" />
+        <p class="muted">PC の素材 · {{ assetEditing.projectFolder }}</p>
+      </div>
+      <section v-if="modal === 'connect'" class="graphic-setup" aria-labelledby="graphic-setup-title">
+        <h3 id="graphic-setup-title">プロジェクトの画像フォルダー</h3>
+        <p v-if="!graphicCounts" class="muted">
+          接続する前に <strong>Assets/Graphic</strong> を選択してください。Characters、CG、Backgrounds の画像をこのタブに読み込みます。
+        </p>
+        <ul v-else class="graphic-folder-counts" aria-label="読み込んだフォルダー">
+          <li v-for="folder in GRAPHIC_FOLDERS" :key="folder.name">
+            <Check :size="14" /><span>{{ folder.label }} <small>· {{ folder.name }}</small></span><small>{{ graphicCounts[folder.name] }} 枚</small>
+          </li>
+        </ul>
+        <button type="button" class="button" :class="{ primary: !graphicCounts }" :disabled="busy" @click="pickGraphicFolder">
+          <FolderOpen :size="16" />{{ graphicCounts ? "フォルダーを変更" : "Assets/Graphic を選択" }}
+        </button>
+        <p v-if="graphicError" class="error" role="alert">{{ graphicError }}</p>
+      </section>
+      <form v-if="modal === 'connect' && graphicCounts" @submit.prevent="connect">
         <p class="muted">
           同時編集の取り違えを防ぐため、接続後スプレッドシートをロックすることを推奨します。
         </p>
@@ -2286,6 +2434,14 @@ onBeforeUnmount(() => {
         importFiles([...$event.target.files], uploadKind);
         $event.target.value = '';
       "
+    />
+    <input
+      ref="graphicInput"
+      type="file"
+      webkitdirectory
+      multiple
+      hidden
+      @change="loadGraphicFolder"
     />
     <input
       ref="backupInput"

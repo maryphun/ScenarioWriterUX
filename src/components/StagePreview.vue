@@ -65,7 +65,20 @@ const missing = computed(() =>
 const clone = (s) => JSON.parse(JSON.stringify(s));
 const findAsset = (name) =>
   props.assets.find((a) => a.name.toLowerCase() === String(name).toLowerCase());
-const imageForAsset = (name) => images.get(findAsset(name)?.id);
+function imageForAsset(name) {
+  const asset = findAsset(name);
+  if (!asset?.url) return;
+  let img = images.get(asset.url);
+  if (!img) {
+    img = new Image();
+    images.set(asset.url, img);
+    img.onload = () => {
+      if (images.get(asset.url) === img) draw();
+    };
+    img.src = asset.url;
+  }
+  return img.complete && img.naturalWidth ? img : undefined;
+}
 function characterImages(character) {
   if (character.layered) {
     const body = imageForAsset(character.bodyAsset);
@@ -129,7 +142,7 @@ function draw() {
   ctx.clearRect(0, 0, 1920, 1080);
   ctx.fillStyle = "#1c2635";
   ctx.fillRect(0, 0, 1920, 1080);
-  const background = images.get(findAsset(display.value.background)?.id);
+  const background = imageForAsset(display.value.background);
   if (background) ctx.drawImage(background, 0, 0, 1920, 1080);
   else {
     ctx.fillStyle = "#9cacc1";
@@ -183,18 +196,12 @@ function draw() {
     ctx.restore();
   }
 }
-async function loadImages() {
-  for (const a of props.assets.filter((a) =>
-    ["background", "sprite"].includes(a.kind),
-  )) {
-    if (images.get(a.id)?.src === a.url) continue;
-    const img = new Image();
-    img.onload = () => {
-      images.set(a.id, img);
-      draw();
-    };
-    img.src = a.url;
+function refreshImages() {
+  const activeUrls = new Set(props.assets.map((asset) => asset.url));
+  for (const url of images.keys()) {
+    if (!activeUrls.has(url)) images.delete(url);
   }
+  tints.clear();
   draw();
 }
 function stop(reset = true) {
@@ -227,7 +234,7 @@ function previewCharacterEffects() {
 }
 watch(() => [props.after, props.row?.key], seek, { deep: true });
 watch(() => props.row?.speaker, draw);
-watch(() => props.assets, loadImages, { deep: true });
+watch(() => props.assets, refreshImages);
 watch(() => props.options, draw, { deep: true });
 function tween(duration, token, update, { spatial = true } = {}) {
   if (spatial && matchMedia("(prefers-reduced-motion: reduce)").matches) duration = 0;
@@ -478,7 +485,6 @@ function pointerUp() {
   emit("move-character", { id, x: Number(c.x.toFixed(3)) });
 }
 onMounted(() => {
-  loadImages();
   draw();
   resizeObserver = new ResizeObserver(draw);
   resizeObserver.observe(stage.value);
@@ -487,6 +493,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   stop();
   resizeObserver?.disconnect();
+  images.clear();
+  tints.clear();
 });
 defineExpose({ play, stop });
 </script>

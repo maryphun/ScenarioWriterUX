@@ -19,7 +19,7 @@ npm run build
 2. Push this directory as the root of `maryphun/ScenarioWriterUX`.
 3. In the GitHub repository, choose **Settings → Pages → Source → GitHub Actions**. The included workflow builds, tests, and deploys the editor. It runs on `main` and `codex/scenario-editor`, or manually.
 4. Optionally set the repository Actions variable `APPS_SCRIPT_URL` to the public `/exec` deployment URL. The URL can also be entered in the app, so no rebuild is required to connect.
-5. Open the published app, click connection settings, and enter the Web App URL and the private access key. The frontend includes no secret and no production scenario text.
+5. Open the app and choose the Unity project's `Assets/Graphic` folder from connection settings. Once `Characters`, `CG`, and `Backgrounds` are loaded, enter the Web App URL and private access key. The frontend includes no secret and no production scenario text.
 
 ## Writer workflow
 
@@ -38,6 +38,8 @@ npm run build
 - Create choices with a new node name or type an existing node. Preview choices navigate the graph and carry scene state into the destination. Return to the branch point with “分岐元へ”. Directly selecting a scene previews it from a clean state.
 - Previous/next controls are centered under the preview. Selecting or editing a line silently previews its temporary tint/shake effects. Reduced-motion preference suppresses spatial shake in the browser. There is no transport play button.
 - Every page load starts without scenario data and opens the connection dialog. The connected state appears only after a fresh spreadsheet read; cached workbooks and the old sample are never restored. Media can remain in IndexedDB, while scenario edits remain in the current page until “シートに反映” succeeds. Closing a page with pending edits triggers the browser's unsaved-changes warning.
+- Choose `Assets/Graphic` once per page session. The editor reads images from its three artwork subfolders into the tab. Files with a matching project asset name take precedence in the preview and picker. Project CG images can be opened under 「PC の素材」. Folder files stay on the device.
+- In the 立ち絵 panel, 「表示中を編集」 shows the controls for the selected visible character. Use 「新しく追加」 to choose a cached sprite from the thumbnail picker and enter a new character ID. Position, order and fade settings are under 「表示の詳細設定」.
 - Saves match existing rows by unique `LineID`, with exact-row and legacy order fallbacks. If another writer edited different cells or added, removed, or reordered rows after the current writer's last read, the backend preserves the current sheet structure and applies local edits to safely matched rows. A same-cell edit, a local edit to a remotely deleted row, or a simultaneous local structure change stops with a conflict instead of silently discarding either writer's work. Existing `Master` entries supply speaker names/colors, without displaying that technical label in the editor.
 - Locally inserting or deleting dialogue shifts only the script's A:H range and writes only the new or edited cells. The review matches existing rows by their original sheet row, lists row additions/removals separately, and does not count every shifted row as changed.
 - Share each asset through its settings to store it in the API's private Drive folder. Other sessions load those assets on connection or using “共有素材を読み込む”. Local-only assets are labeled accordingly. Uploads are limited to 10 MB per file; there is no fixed character count limit.
