@@ -45,6 +45,29 @@ test("character command IDs start blank", () => {
     assert.equal(spec.fields.find((field) => field.key === "id").default, "");
   }
 });
+test("initial show tint is optional and independent of display order and legacy setup", () => {
+  const prefix = "[char:add:actor:Sprite:0.5:0.5:false";
+  const commands = parseCommands(`${prefix}:tint=black] ${prefix}:2:1.2:instant:tint=#ffffff80]`);
+  assert.equal(commands[0].values.order, "");
+  assert.equal(commands[0].values.initialTint, "black");
+  assert.equal(commands[1].values.order, "2");
+  assert.equal(commands[1].values.initialTint, "#ffffff80");
+  for (const command of commands)
+    assert.equal(buildCommand(command.key, command.values), command.raw);
+  const legacy = parseCommands(`${prefix}:keep:1.2:instant]`)[0];
+  assert.equal(buildCommand(legacy.key, { ...legacy.values, initialTint: "black" }),
+    `${prefix}:keep:1.2:instant:tint=black]`);
+
+  const rows = [
+    { command: `${prefix}:tint=black]` },
+    { command: `${prefix}]` },
+    { command: "[char:tint:actor:white:0.5]" },
+  ];
+  assert.equal(stateAt(rows, 0).characters[0].tint, "black");
+  assert.equal(stateAt(rows, 1).characters[0].tint, "black");
+  assert.equal(stateAt(rows, 2).characters[0].tint, "white");
+  assert.throws(() => buildCommand("char:show", { id: "actor", asset: "Sprite", initialTint: "invalid" }), /色名/);
+});
 test("character display order is optional on show and can be changed later", () => {
   assert.equal(
     buildCommand("char:show", {

@@ -967,6 +967,14 @@ fieldset {
   color: var(--ink);
   box-shadow: 0 1px 3px var(--shadow);
 }
+.initial-tint-field {
+  display: grid;
+  gap: 6px;
+  margin-block: 10px;
+}
+.initial-tint-field input:not([type="color"]) {
+  flex: 1;
+}
 .number-control,
 .color-control {
   display: flex;

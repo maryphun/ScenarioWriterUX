@@ -1,3 +1,5 @@
+import { SHOW_TINT_PREFIX } from "./commands.js";
+
 // Author commands stay unchanged in the sheet. Literal command blocks are
 // coordinated by the game's dialogue_stage handler using its visible characters.
 function tokensFor(command) {
@@ -51,10 +53,15 @@ function prepareInitialSetup(commands, coordinateStage = false) {
     if (transform) {
       if (shows.has(id)) {
         const showIndex = shows.get(id), show = outputTokens[showIndex];
+        // The named tint is a suffix. Keep it outside the positional setup slots.
+        const initialTint = show.length > 7 && valueOf(show.at(-1)).toLowerCase().startsWith(SHOW_TINT_PREFIX)
+          ? show.pop()
+          : null;
         const defaults = ["0.5", '"instant"', "false", '"keep"', '"keep"'];
         while (show.length < 9) show.push(defaults[show.length - 4]);
         show[transform[0]] = transform[1];
         if (transform[0] === 4) show[9] = '"instant"';
+        if (initialTint) show.push(initialTint);
         output[showIndex] = `<<${show.join(" ")}>>`;
       } else {
         output.push(command);

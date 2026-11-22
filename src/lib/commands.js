@@ -1,5 +1,6 @@
 export const CHARACTER_POSITION_MIN = -0.5;
 export const CHARACTER_POSITION_MAX = 1.5;
+export const SHOW_TINT_PREFIX = "tint=";
 
 const field = (key, label, type = "text", value = "", extra = {}) => ({
   key,
@@ -60,6 +61,7 @@ export const COMMANDS = [
         options: ["false", "true"],
       }),
       displayOrder(true),
+      field("initialTint", "初期色", "color", "", { optional: true }),
     ],
     ["char:add"],
   ),
@@ -237,17 +239,26 @@ export function parseCommands(raw = "") {
           ? undefined
           : findSpec(key);
       const args = parts.slice(key?.includes(":") ? 2 : 1);
+      const isShow = definition?.key === "char:show";
+      const hasInitialTint = isShow && args.length > 5
+        && args.at(-1).toLowerCase().startsWith(SHOW_TINT_PREFIX);
+      const positional = hasInitialTint ? args.slice(0, -1) : args;
+      const values = definition
+        ? Object.fromEntries(definition.fields.map((f, i) => [f.key, positional[i] ?? f.default]))
+        : {};
+      if (isShow) {
+        values.initialTint = hasInitialTint ? args.at(-1).slice(SHOW_TINT_PREFIX.length) : "";
+        if (values.order.toLowerCase() === "keep") values.order = "";
+        // Preserve authored scale and legacy placement arguments when editing a show.
+        if (positional.length > 6) values.showSetup = positional.slice(6);
+      }
       return {
         raw,
         key,
         canonical: definition?.key,
         args,
         definition,
-        values: definition
-          ? Object.fromEntries(
-              definition.fields.map((f, i) => [f.key, args[i] ?? f.default]),
-            )
-          : {},
+        values,
       };
     })
     .filter(Boolean);
@@ -278,6 +289,7 @@ export function validateValues(definition, values) {
       errors.push(`${f.label}の値が範囲外です。`);
     if (
       f.type === "color" &&
+      !(f.optional && !v) &&
       !COLOR_NAMES.includes(v.toLowerCase()) &&
       !/^#[\da-f]{6}([\da-f]{2})?$/i.test(v)
     )
@@ -296,8 +308,15 @@ export function buildCommand(key, values = {}) {
   const args = definition.fields.map((f) =>
     String(values[f.key] ?? f.default).trim(),
   );
+  const isShow = definition.key === "char:show";
+  const initialTint = isShow ? args.pop() : "";
   while (args.length && definition.fields[args.length - 1].optional && !args.at(-1))
     args.pop();
+  if (isShow && values.showSetup?.length) {
+    if (args.length === 5) args.push("keep");
+    args.push(...values.showSetup);
+  }
+  if (initialTint) args.push(SHOW_TINT_PREFIX + initialTint);
   return `[${key}${args.length ? ":" + args.join(":") : ""}]`;
 }
 export function commandLabel(command) {
@@ -413,7 +432,7 @@ export function applyCommand(state, command) {
       x: Number(v.x),
       scale: previous?.scale ?? 1,
       flip: ["true", "left", "flip", "flipped"].includes(v.flip),
-      tint: previous?.tint ?? "white",
+      tint: v.initialTint || previous?.tint || "white",
       order: v.order === "" ? (previous?.order ?? 0) : Number(v.order),
       orderExplicit: v.order !== "" || (previous?.orderExplicit ?? false),
     }, v.asset);

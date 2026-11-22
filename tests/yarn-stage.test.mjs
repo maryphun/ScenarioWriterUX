@@ -4,6 +4,15 @@ import { prepareYarnStageText } from "../src/lib/yarn-stage.js";
 import { exportYarn, importTab } from "../src/lib/workbook.js";
 import { parseCommands } from "../src/lib/commands.js";
 
+test("initial show tint survives folded setup and keeps the authored fade", () => {
+  const tab = importTab({ id: 1, name: "Story", rows: [
+    ["Start", "", "", "Reveal", "", "", "[char:show:hero:Sprite:0.5:0.5:false:2:tint=black] [char:move:hero:0.75:instant] [char:scale:hero:1.2:instant] [bgm:play:Theme]"],
+  ] });
+  const yarn = exportYarn({ tabs: [tab], speakers: [] }, parseCommands);
+  assert.deepEqual(groups(yarn)[0][0].args,
+    ["show", "hero", "Sprite", "0.75", "0.5", "false", "2", "1.2", "instant", "tint=black"]);
+});
+
 function groups(text) {
   return text.split("\n").filter((line) => line.trimStart().startsWith("<<dialogue_stage "))
     .map((line) => JSON.parse(Buffer.from(JSON.parse(line.trim().slice("<<dialogue_stage ".length, -2)), "base64").toString("utf8")).commands);

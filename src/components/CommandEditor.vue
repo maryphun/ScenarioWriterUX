@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from "vue";
+import InitialTintField from "./InitialTintField.vue";
 import {
   COMMANDS,
   findSpec,
@@ -106,6 +107,7 @@ const optionsFor = (f) => props.assets.filter((a) => a.kind === f.kind);
             required
         /></label>
       </fieldset>
+      <InitialTintField v-else-if="f.key === 'initialTint'" v-model="values[f.key]" />
       <label v-else-if="f.type === 'color'"
         >{{ definition.key === "background" ? "フェード色" : f.label }}
         <div class="color-control">

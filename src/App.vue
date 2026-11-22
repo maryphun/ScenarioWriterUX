@@ -34,6 +34,7 @@ import {
 } from "lucide-vue-next";
 import StagePreview from "./components/StagePreview.vue";
 import CommandEditor from "./components/CommandEditor.vue";
+import InitialTintField from "./components/InitialTintField.vue";
 import RowStatusMenu from "./components/RowStatusMenu.vue";
 import { copySceneStatus, sceneStatusCommands } from "./lib/scene-status.js";
 import {
@@ -243,6 +244,7 @@ const characterForm = ref({
   ...DEFAULT_CHARACTER_TRANSITION,
   flip: "false",
   order: "",
+  initialTint: "",
 });
 const formBodyPreset = computed(() => characterBodyPreset(characterForm.value.id));
 const hideCharacterForm = ref({ ...DEFAULT_CHARACTER_TRANSITION });
@@ -567,6 +569,7 @@ function addCharacter() {
       }),
     );
     characterForm.value.id = characterId;
+    characterForm.value.initialTint = "";
     selectedCharacter.value = characterId;
     notify("立ち絵を追加しました。");
   } catch (e) {
@@ -1918,7 +1921,8 @@ onBeforeUnmount(() => {
                 step="1"
                 placeholder="自動"
               /><small>0 が最前。1 は 0 の後ろです。</small></label
-            ><fieldset class="transition-fields character-transition">
+            ><InitialTintField v-model="characterForm.initialTint" />
+            <fieldset class="transition-fields character-transition">
               <legend>表示の切り替え</legend>
               <div class="segmented">
                 <button
