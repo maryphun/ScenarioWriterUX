@@ -83,6 +83,38 @@ test("Vue editor and existing command forms render with their saved values", asy
     assert.match(shakeForm, /type="range"[\s\S]*?min="1"[\s\S]*?max="10"/);
     assert.match(shakeForm, /value="10"/);
     assert.match(shakeForm, /0\.7秒/);
+
+    const spriteNames = [
+      "Ch_Toka_TF_angry",
+      "Ch_Toka_TF_Confusion",
+      "Ch_Toka_TF_default",
+      "Ch_Toka_Face_angry",
+      "Ch_Toka_Body_TF",
+      "Ch_Kaede_TF_default",
+    ];
+    const assets = spriteNames.map((name) => ({ id: name, name, kind: "sprite" }));
+    const expressionForm = (props) =>
+      renderToString(createSSRApp(CommandEditor, { assets, ...props }));
+    const thumbnailNames = (html) =>
+      [...html.matchAll(/class="sprite-option-name">([^<]+)</g)].map((m) => m[1]);
+    const related = await expressionForm({
+      initial: "[char:variation:ピュアプリピーチ:Ch_Toka_Face_angry:0.5]",
+      stageCharacters: [{ id: "ピュアプリピーチ", asset: "Ch_Toka_TF_default" }],
+    });
+    assert.deepEqual(thumbnailNames(related), spriteNames.slice(0, 3));
+    assert.match(related, /value="Ch_Toka_Face_angry"/);
+
+    const other = await expressionForm({
+      initial: "[char:face:kaede:Ch_Kaede_TF_default:instant]",
+      stageCharacters: [{ id: "Kaede", asset: "Ch_Kaede_TF_default" }],
+    });
+    assert.deepEqual(thumbnailNames(other), spriteNames);
+    const missing = await expressionForm({
+      initial: "[char:face:peach:Ch_Toka_TF_missing:instant]",
+      assets: assets.slice(3),
+    });
+    assert.deepEqual(thumbnailNames(missing), []);
+    assert.match(missing, /Ch_Toka_TF_ の立ち絵がありません/);
   } finally {
     await server.close();
   }

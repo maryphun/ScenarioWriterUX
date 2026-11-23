@@ -38,6 +38,7 @@ import StagePreview from "./components/StagePreview.vue";
 import CommandEditor from "./components/CommandEditor.vue";
 import InitialTintField from "./components/InitialTintField.vue";
 import RowStatusMenu from "./components/RowStatusMenu.vue";
+import SpriteThumbnailGrid from "./components/SpriteThumbnailGrid.vue";
 import { copySceneStatus, sceneStatusCommands } from "./lib/scene-status.js";
 import {
   COMMANDS,
@@ -52,7 +53,6 @@ import {
   validateValues,
   COLOR_NAMES,
   characterBodyPreset,
-  isTokaFaceAsset,
   usesPresetBody,
 } from "./lib/commands.js";
 import {
@@ -96,6 +96,7 @@ import { DEFAULT_PREVIEW_OPTIONS } from "./lib/preview.js";
 import { GRAPHIC_FOLDERS, scanGraphicFolder } from "./lib/graphic-folder.js";
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
+const lastLocationKey = `scenario-last-location:${SHEET_ID}`;
 const workbook = ref(emptyWorkbook()),
   tabId = ref(""),
   nodeName = ref(""),
@@ -334,7 +335,15 @@ watch(modal, async (value) => {
   if (value && !dialog.value.open) dialog.value.showModal();
   else if (!value && dialog.value.open) dialog.value.close();
 });
-watch([tabId, nodeName], () => closeRowMenu());
+watch([tabId, nodeName], ([sheet, node]) => {
+  closeRowMenu();
+  if (!connected.value || sheet === "") return;
+  try {
+    localStorage.setItem(lastLocationKey, JSON.stringify({ tabId: sheet, nodeName: node }));
+  } catch {
+    // Navigation still works when the browser cannot save the preference.
+  }
+});
 function openRowMenu(event, entry) {
   if (isInstructionRow(entry.row)) return;
   event.preventDefault();
@@ -397,9 +406,22 @@ watch(
   },
   { immediate: true },
 );
-function changeTab() {
-  nodeName.value = sceneNames(tab.value)[0] ?? "";
+function changeTab(preferredNode) {
+  nodeName.value = names.value.includes(preferredNode)
+    ? preferredNode
+    : names.value[0] ?? "";
   selectScene();
+}
+function restoreLastLocation() {
+  let saved;
+  try {
+    saved = JSON.parse(localStorage.getItem(lastLocationKey));
+  } catch {
+    // Missing or unreadable preferences fall back to the first sheet and node.
+  }
+  const savedTab = workbook.value.tabs.find((item) => item.id === saved?.tabId);
+  tabId.value = savedTab?.id ?? workbook.value.tabs[0]?.id ?? "";
+  changeTab(savedTab ? saved?.nodeName : undefined);
 }
 function selectScene() {
   selectedKey.value = sceneLines(tab.value, nodeName.value)[0]?.row.key || "";
@@ -753,8 +775,7 @@ async function connect() {
     baseline.value = {};
     baselineSignatures.value = {};
     captureBaselines();
-    tabId.value = workbook.value.tabs[0]?.id;
-    changeTab();
+    restoreLastLocation();
     undoStack.value = [];
     redoStack.value = [];
     modal.value = "";
@@ -1183,7 +1204,7 @@ onBeforeUnmount(() => {
       <div class="project-path">
         <FileText :size="18" /><span>脚本</span
         ><span class="path-separator">/</span
-        ><select v-model="tabId" @change="changeTab" aria-label="シート">
+        ><select v-model="tabId" @change="changeTab()" aria-label="シート">
           <option v-for="t in workbook.tabs" :key="t.id" :value="t.id">
             {{ t.name }}
           </option>
@@ -2220,6 +2241,7 @@ onBeforeUnmount(() => {
         :preset="commandPreset"
         :assets="catalog"
         :character-ids="characterIdOptions"
+        :stage-characters="after.characters"
         @save="saveCommand"
         @cancel="modal = ''"
       />
@@ -2230,21 +2252,13 @@ onBeforeUnmount(() => {
         </label>
         <p v-if="!spriteAssets.length" class="muted">接続設定で Assets/Graphic を選ぶと、立ち絵がここに表示されます。</p>
         <p v-else-if="!filteredSprites.length" class="muted">該当する立ち絵がありません。</p>
-        <div v-else class="sprite-grid" aria-label="登録済みの立ち絵">
-          <button
-            v-for="asset in filteredSprites"
-            :key="asset.id"
-            type="button"
-            class="sprite-option"
-            :aria-pressed="asset.name === characterForm.asset"
-            @click="selectAddSprite(asset)"
-          >
-            <span class="sprite-option-image" :class="{ 'face-detail': isTokaFaceAsset(asset.name) }">
-              <img :src="asset.url" alt="" loading="lazy" />
-            </span>
-            <span class="sprite-option-name">{{ asset.name }}</span>
-          </button>
-        </div>
+        <SpriteThumbnailGrid
+          v-else
+          aria-label="登録済みの立ち絵"
+          :assets="filteredSprites"
+          :selected-name="characterForm.asset"
+          @select="selectAddSprite"
+        />
       </div>
       <div v-if="modal === 'asset-preview' && assetEditing">
         <img class="project-asset-preview" :src="assetEditing.url" :alt="assetEditing.name" />

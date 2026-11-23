@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import InitialTintField from "./InitialTintField.vue";
+import SpriteThumbnailGrid from "./SpriteThumbnailGrid.vue";
 import {
   COMMANDS,
   findSpec,
@@ -14,6 +15,7 @@ const props = defineProps({
   preset: { type: String, default: "background" },
   assets: { type: Array, default: () => [] },
   characterIds: { type: Array, default: () => [] },
+  stageCharacters: { type: Array, default: () => [] },
 });
 const emit = defineEmits(["save", "cancel"]);
 const selected = ref(props.preset),
@@ -28,15 +30,13 @@ function reset() {
   message.value = "";
 }
 watch(selected, reset, { immediate: true, flush: "sync" });
+const originalCommand = computed(() => parseCommands(props.initial)[0]);
 watch(
-  () => props.initial,
-  (raw) => {
-    if (raw) {
-      const c = parseCommands(raw)[0];
-      if (c?.definition) {
-        selected.value = c.key;
-        values.value = { ...c.values };
-      }
+  originalCommand,
+  (command) => {
+    if (command?.definition) {
+      selected.value = command.key;
+      values.value = { ...command.values };
     }
   },
   { immediate: true },
@@ -57,6 +57,22 @@ function submit() {
   emit("save", preview.value);
 }
 const optionsFor = (f) => props.assets.filter((a) => a.kind === f.kind);
+const spriteAssets = computed(() => props.assets.filter((asset) => asset.kind === "sprite"));
+const isTokaTfSprite = (name) => name.toLowerCase().startsWith("ch_toka_tf_");
+const restrictExpressionSprites = computed(() => {
+  const id = values.value.id?.trim().toLowerCase();
+  const displayed = props.stageCharacters.find((character) => character.id.toLowerCase() === id);
+  const original = originalCommand.value;
+  const originalAsset = original?.canonical === "char:face" && original.values.id.toLowerCase() === id
+    ? original.values.asset
+    : "";
+  return isTokaTfSprite(displayed?.asset || originalAsset);
+});
+const expressionSprites = computed(() =>
+  restrictExpressionSprites.value
+    ? spriteAssets.value.filter((asset) => isTokaTfSprite(asset.name))
+    : spriteAssets.value,
+);
 </script>
 <template>
   <form class="command-form" @submit.prevent="submit">
@@ -178,6 +194,24 @@ const optionsFor = (f) => props.assets.filter((a) => a.kind === f.kind);
           </option>
         </datalist></label
       >
+      <details
+        v-if="definition.key === 'char:face' && f.key === 'asset'"
+        :open="restrictExpressionSprites"
+        class="expression-picker"
+      >
+        <summary>サムネイルから選ぶ</summary>
+        <SpriteThumbnailGrid
+          v-if="expressionSprites.length"
+          aria-label="表情の候補"
+          :assets="expressionSprites"
+          :selected-name="values.asset"
+          @select="values.asset = $event.name"
+        />
+        <p v-else-if="restrictExpressionSprites" class="muted">
+          読み込んだ素材に Ch_Toka_TF_ の立ち絵がありません。
+        </p>
+        <p v-else class="muted">接続設定で Assets/Graphic を選ぶと、立ち絵がここに表示されます。</p>
+      </details>
     </template>
     <p v-if="definition.key === 'char:flash'" class="meta">
       即時に着色し、0.5秒で通常の色に戻します。
