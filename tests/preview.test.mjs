@@ -6,8 +6,10 @@ import {
   NON_SPEAKER_FILTER,
   characterCenterX,
   characterPositionFromCenter,
+  groupPreviewCommands,
   isNonSpeakingCharacter,
 } from "../src/lib/preview.js";
+import { parseCommands } from "../src/lib/commands.js";
 
 test("character preview uses the requested framing by default", () => {
   assert.deepEqual(
@@ -56,4 +58,19 @@ test("named dialogue dims every visible character except the matching ID", () =>
   assert.equal(isNonSpeakingCharacter("ピュアプリピーチ", "白崎桃香"), true);
   assert.equal(isNonSpeakingCharacter("momoka", ""), false);
   assert.match(NON_SPEAKER_FILTER, /grayscale/);
+});
+
+test("preview keeps overlapping effects together and preserves presentation boundaries", () => {
+  const commands = parseCommands(
+    "[char:show:tester:Ch_Test:0.5:0.2] [se:play:Click] [shake:0.4:8] " +
+    "[bg:BG_Test:0.5] [char:hide:tester:0.3] [bg:clear] [bg:BG_Next:instant]",
+  );
+  assert.deepEqual(
+    groupPreviewCommands(commands).map((group) => group.map((command) => command.canonical)),
+    [
+      ["char:show", "se:play", "shake", "background"],
+      ["char:hide", "background:clear"],
+      ["background"],
+    ],
+  );
 });

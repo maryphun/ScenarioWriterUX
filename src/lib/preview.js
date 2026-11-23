@@ -13,6 +13,37 @@ export const PREVIEW_STAGE_WIDTH = 1920;
 export const CHARACTER_HORIZONTAL_OVERSCAN = 250;
 export const NON_SPEAKER_FILTER = "grayscale(40%) brightness(72%)";
 
+export const isPreviewBackground = ({ canonical }) =>
+  canonical === "background" || canonical === "background:clear";
+export const isPreviewRemoval = ({ canonical }) =>
+  canonical === "char:hide" || canonical === "char:clear";
+
+// Match the export's sequencing boundaries for successive backgrounds and
+// characters that appear and are then removed within the same line.
+export function groupPreviewCommands(commands) {
+  const groups = [];
+  let group = [], hasBackground = false;
+  const shown = new Set();
+  for (const command of commands) {
+    const key = command.canonical;
+    const background = isPreviewBackground(command);
+    const id = command.values.id?.toLowerCase();
+    if (background && hasBackground ||
+        key === "char:hide" && shown.has(id) ||
+        key === "char:clear" && shown.size) {
+      groups.push(group);
+      group = [];
+      hasBackground = false;
+      shown.clear();
+    }
+    group.push(command);
+    if (background) hasBackground = true;
+    if (key === "char:show") shown.add(id);
+  }
+  if (group.length) groups.push(group);
+  return groups;
+}
+
 function characterPositionBounds(characterWidth, stageWidth) {
   const fits = characterWidth <= stageWidth;
   return {

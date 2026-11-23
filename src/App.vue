@@ -16,6 +16,8 @@ import {
   Users,
   Music2,
   Clapperboard,
+  Play,
+  Square,
   Upload,
   Download,
   Undo2,
@@ -210,6 +212,8 @@ const backgroundForm = ref({
   color: "black",
 });
 const compactPreview = ref(false);
+const stagePreview = ref();
+const previewPlaying = ref(false);
 const graphicCounts = ref(null);
 const graphicError = ref("");
 const catalog = computed(() => {
@@ -432,6 +436,10 @@ function selectScene() {
 function selectLine(entry) {
   selectedKey.value = entry.row.key;
   focusCheckpoint = false;
+}
+function togglePreviewPlayback() {
+  if (previewPlaying.value) stagePreview.value?.stop();
+  else stagePreview.value?.play();
 }
 function step(delta) {
   const entry = lines.value[index.value + delta];
@@ -1418,6 +1426,7 @@ onBeforeUnmount(() => {
         <div class="preview-stage" :class="{ compact: compactPreview }">
           <StagePreview
             v-if="current"
+            ref="stagePreview"
             :before="before"
             :after="after"
             :row="current"
@@ -1430,6 +1439,7 @@ onBeforeUnmount(() => {
             @move-character="moveCharacter"
             @select-character="editVisibleCharacter"
             @message="notify"
+            @playing="previewPlaying = $event"
           />
           <div v-else class="empty-preview">
             <Clapperboard :size="32" />
@@ -1445,19 +1455,34 @@ onBeforeUnmount(() => {
             </button>
           </div>
         </div>
-        <div class="transport">
+        <div class="transport" :class="{ 'compact-transport': compactPreview }">
+          <div class="transport-navigation">
+            <button
+              class="button"
+              @click="step(-1)"
+              :disabled="index === 0 || !current"
+            >
+              <ArrowLeft :size="16" />前へ
+            </button>
+            <button
+              class="button"
+              @click="step(1)"
+              :disabled="index >= lines.length - 1 || !current"
+            >
+              次へ<ArrowRight :size="16" />
+            </button>
+          </div>
           <button
-            class="button"
-            @click="step(-1)"
-            :disabled="index === 0 || !current"
+            v-if="current && !currentIsInstruction"
+            type="button"
+            class="button preview-play-button"
+            :aria-label="previewPlaying ? 'プレビューを停止' : 'この行の演出を再生'"
+            :title="previewPlaying ? 'プレビューを停止' : 'この行の演出を再生'"
+            @click="togglePreviewPlayback"
           >
-            <ArrowLeft :size="16" />前へ</button
-          ><button
-            class="button"
-            @click="step(1)"
-            :disabled="index >= lines.length - 1 || !current"
-          >
-            次へ<ArrowRight :size="16" />
+            <Square v-if="previewPlaying" :size="16" aria-hidden="true" />
+            <Play v-else :size="16" aria-hidden="true" />
+            <span>{{ previewPlaying ? "停止" : "再生" }}</span>
           </button>
         </div>
         <section v-if="currentIsInstruction" class="instruction-editor">

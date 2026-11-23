@@ -15,7 +15,10 @@ import {
   NON_SPEAKER_FILTER,
   characterCenterX,
   characterPositionFromCenter,
+  groupPreviewCommands,
+  isPreviewBackground,
   isNonSpeakingCharacter,
+  isPreviewRemoval,
 } from "../lib/preview.js";
 import { createCharacterEffects, isCharacterEffect } from "../lib/character-effects.js";
 const props = defineProps({
@@ -42,7 +45,7 @@ const canvas = ref(),
   busy = ref(false);
 const images = new Map(),
   tints = new Map(),
-  audio = new Map();
+  audio = new Set();
 let generation = 0,
   bgm = null,
   resizeObserver;
@@ -257,53 +260,96 @@ function tween(duration, token, update, { spatial = true } = {}) {
 function lerp(a, b, p) {
   return a + (b - a) * p;
 }
-async function playAudio(command, state, token) {
+async function playAudio(command, state, token, { paused = false } = {}) {
   const v = command.values,
     key = command.canonical;
   if (key === "bgm:volume" && bgm) bgm.volume = Number(v.volume);
   if (key === "bgm:pause" && bgm) bgm.pause();
-  if (key === "bgm:resume" && bgm) bgm.play().catch(() => {});
+  if (key === "bgm:resume" && bgm) await startAudio(bgm, token);
   if (key === "bgm:stop" && bgm) {
     const old = bgm;
     await tween(seconds(v.duration), token, (p) => {
       old.volume = state.bgm.volume * (1 - p);
-    });
+    }, { spatial: false });
     old.pause();
-    bgm = null;
+    audio.delete(old);
+    if (bgm === old) bgm = null;
   }
   if (["bgm:play", "bgm:crossfade", "se:play"].includes(key)) {
     const a = findAsset(v.asset);
-    if (!a) return;
+    if (!a?.url) return;
     const sound = new Audio(a.url);
-    audio.set(crypto.randomUUID(), sound);
+    audio.add(sound);
     sound.loop = key !== "se:play";
-    sound.volume =
-      key === "se:play" ? Number(v.volume) * state.seVolume : state.bgm.volume;
+    const targetVolume = sound.loop ? state.bgm.volume : Number(v.volume) * state.seVolume;
+    const duration = seconds(v.duration);
+    sound.volume = duration ? 0 : targetVolume;
     const old = bgm;
-    if (key !== "se:play") {
+    if (paused) {
       bgm = sound;
-      if (key === "bgm:play") old?.pause();
+      return;
     }
-    try {
-      await sound.play();
-    } catch {
-      emit("message", "音声を再生できません。ファイル形式を確認してください。");
+    if (!await startAudio(sound, token)) {
+      audio.delete(sound);
+      return;
     }
-    if (
-      key === "bgm:crossfade" ||
-      (key === "bgm:play" && seconds(v.duration))
-    ) {
-      const target = sound.volume;
-      sound.volume = 0;
-      await tween(seconds(v.duration), token, (p) => {
-        sound.volume = target * p;
-        if (old) old.volume = target * (1 - p);
-      });
-      old?.pause();
+    if (!sound.loop) {
+      await waitForSound(sound);
+      audio.delete(sound);
+      return;
+    }
+    bgm = sound;
+    if (key === "bgm:play") old?.pause();
+    if (duration) {
+      const outgoing = old?.volume ?? 0;
+      await tween(duration, token, (p) => {
+        sound.volume = targetVolume * p;
+        if (key === "bgm:crossfade" && old) old.volume = outgoing * (1 - p);
+      }, { spatial: false });
+    }
+    if (old) {
+      old.pause();
+      audio.delete(old);
     }
   }
 }
+async function startAudio(sound, token) {
+  try {
+    await sound.play();
+    return token === generation;
+  } catch {
+    if (token === generation)
+      emit("message", "音声を再生できません。ファイル形式を確認してください。");
+    return false;
+  }
+}
+function waitForSound(sound) {
+  if (sound.paused || sound.ended) return;
+  return new Promise((resolve) => {
+    const events = ["ended", "pause", "error"];
+    function finished() {
+      for (const event of events) sound.removeEventListener(event, finished);
+      resolve();
+    }
+    for (const event of events) sound.addEventListener(event, finished);
+  });
+}
+function playScreenShake({ duration, strength }) {
+  const time = seconds(duration);
+  if (!time || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const pixels = (Number(strength) * stage.value.clientWidth) / 1920;
+  return stage.value.animate(
+    [
+      { transform: "translateX(0)" },
+      { transform: `translateX(-${pixels}px)` },
+      { transform: `translateX(${pixels}px)` },
+      { transform: "translateX(0)" },
+    ],
+    { duration: time * 1000 },
+  ).finished.catch(() => {});
+}
 async function play() {
+  if (props.instruction) return;
   stop(false);
   const token = generation;
   busy.value = true;
@@ -311,146 +357,209 @@ async function play() {
   let state = clone(props.before);
   display.value = clone(state);
   draw();
-  const effectCommands = parseCommands(props.row?.command).filter(isCharacterEffect);
-  const effectTasks = effectCommands.map((command) => characterEffects.start(command, token));
-  let immediateAudioState = clone(state);
-  for (const command of parseCommands(props.row?.command)) {
-    if (!command.definition || validateValues(command.definition, command.values).length) continue;
-    if (command.canonical.startsWith("se:")) {
-      effectTasks.push(playAudio(command, immediateAudioState, token));
-      immediateAudioState = applyCommand(immediateAudioState, command);
-    }
-  }
-  if (state.bgm.playing && state.bgm.asset)
-    await playAudio(
-      parseCommands(buildCommand("bgm:play", { asset: state.bgm.asset }))[0],
-      state,
-      token,
-    );
-  for (const c of parseCommands(props.row?.command)) {
-    if (token !== generation) break;
-    if (!c.definition || validateValues(c.definition, c.values).length)
-      continue;
-    if (isCharacterEffect(c)) continue;
-    if (c.canonical.startsWith("se:")) {
-      state = applyCommand(state, c);
-      continue;
-    }
-    const next = applyCommand(state, c),
-      v = c.values,
-      d = seconds(v.duration);
-    await playAudio(c, state, token);
-    if (token !== generation) break;
-    if (["background", "background:clear"].includes(c.canonical) && d) {
-      backgroundFade.value.color = v.color || "black";
-      await tween(d / 2, token, (p) => {
-        backgroundFade.value.opacity = p;
-      });
-      if (token !== generation) break;
-      display.value = clone(next);
-      await tween(d / 2, token, (p) => {
-        backgroundFade.value.opacity = 1 - p;
-      });
-    } else if (c.canonical === "char:face" && d) {
-      const old = state.characters.find(
-        (x) => x.id.toLowerCase() === v.id.toLowerCase(),
+  const commands = parseCommands(props.row?.command).filter((command) =>
+    command.definition && !validateValues(command.definition, command.values).length,
+  );
+  const soundEffects = [];
+  try {
+    if (state.bgm.asset)
+      await playAudio(
+        parseCommands(buildCommand("bgm:play", { asset: state.bgm.asset }))[0],
+        state,
+        token,
+        { paused: !state.bgm.playing },
       );
-      if (old) {
-        await tween(d / 2, token, (p) => {
-          const s = clone(state);
-          s.characters.find(
-            (x) => x.id.toLowerCase() === v.id.toLowerCase(),
-          ).opacity = 1 - p;
-          display.value = s;
-        });
-        await tween(d / 2, token, (p) => {
-          const s = clone(next);
-          s.characters.find(
-            (x) => x.id.toLowerCase() === v.id.toLowerCase(),
-          ).opacity = p;
-          display.value = s;
-        });
-      }
-    } else if (c.canonical === "shake") {
-      const strength = (Number(v.strength) * stage.value.clientWidth) / 1920;
-      const animation = stage.value.animate(
-        [
-          { transform: "translateX(0)" },
-          { transform: `translateX(-${strength}px)` },
-          { transform: `translateX(${strength}px)` },
-          { transform: "translateX(0)" },
-        ],
-        { duration: d * 1000, iterations: 1 },
-      );
-      await animation.finished.catch(() => {});
-    } else if (d && c.canonical.startsWith("char:")) {
-      await tween(d, token, (p) => {
-        const s = clone(next);
-        for (const ch of s.characters) {
-          const old = state.characters.find(
-            (x) => x.id.toLowerCase() === ch.id.toLowerCase(),
-          );
-          if (old) {
-            ch.x = lerp(old.x, ch.x, p);
-            ch.scale = lerp(old.scale, ch.scale, p);
-            if (c.canonical === "char:tint") {
-              const a = rgba(old.tint),
-                b = rgba(ch.tint);
-              ch.tint =
-                "#" +
-                a
-                  .map((v, i) =>
-                    Math.round(lerp(v, b[i], p) * 255)
-                      .toString(16)
-                      .padStart(2, "0"),
-                  )
-                  .join("");
-            }
-          } else ch.opacity = p;
-        }
-        for (const old of state.characters.filter(
-          (x) =>
-            !s.characters.some(
-              (y) => y.id.toLowerCase() === x.id.toLowerCase(),
-            ),
-        ))
-          s.characters.push({ ...old, opacity: 1 - p });
-        display.value = s;
-      });
-    } else if (d && c.canonical.startsWith("fade:")) {
-      const startOpacity =
-        c.canonical === "fade:in" && state.fade.opacity <= 0.001
-          ? rgba(v.color)[3]
-          : state.fade.opacity;
-      await tween(d, token, (p) => {
-        display.value = {
-          ...clone(next),
-          fade: {
-            color: next.fade.color,
-            opacity: lerp(startOpacity, next.fade.opacity, p),
-          },
-        };
-      });
-    } else if (d && c.canonical.startsWith("dialogue:")) {
-      await tween(d, token, (p) => {
-        display.value = {
-          ...clone(next),
-          dialogue: true,
-          dialogueAlpha: lerp(state.dialogue ? 1 : 0, next.dialogue ? 1 : 0, p),
-        };
-      });
+    for (const group of groupPreviewCommands(commands)) {
+      if (token !== generation) return;
+      state = await playGroup(group, state, token, soundEffects);
     }
-    state = next;
+    await Promise.all(soundEffects);
+  } catch {
     if (token === generation) {
-      display.value = clone(state);
+      emit("message", "プレビューを再生できませんでした。");
+      stop();
+    }
+  } finally {
+    if (token === generation) {
+      display.value = clone(props.after);
       draw();
+      busy.value = Boolean(bgm && !bgm.paused);
+      emit("playing", busy.value);
     }
   }
-  await Promise.all(effectTasks);
-  if (token === generation) {
-    busy.value = Boolean(bgm && !bgm.paused);
-    emit("playing", busy.value);
+}
+async function playGroup(commands, initial, token, soundEffects) {
+  let state = initial;
+  const effects = [], pending = [];
+  const visible = (id) => state.characters.some((character) =>
+    character.id.toLowerCase() === id,
+  );
+  const startEffect = (command) => effects.push(characterEffects.start(command, token));
+  for (const command of commands) {
+    if (isCharacterEffect(command)) {
+      if (visible(command.values.id.toLowerCase())) startEffect(command);
+      else pending.push(command);
+    } else if (command.canonical === "shake") {
+      effects.push(playScreenShake(command.values));
+    } else if (command.canonical.startsWith("se:")) {
+      soundEffects.push(playAudio(command, state, token));
+      state = applyCommand(state, command);
+    }
   }
+
+  async function run(commandsToPlay) {
+    for (const command of commandsToPlay) {
+      if (token !== generation) return;
+      if (command.canonical === "char:show" && !visible(command.values.id.toLowerCase())) {
+        for (const effect of pending)
+          if (effect.values.id.toLowerCase() === command.values.id.toLowerCase())
+            startEffect(effect);
+      }
+      state = await playCommand(command, state, token);
+    }
+  }
+  const music = commands.filter((command) => command.canonical.startsWith("bgm:"));
+  async function playMusic(musicState) {
+    for (const command of music) {
+      if (token !== generation) return;
+      await playAudio(command, musicState, token);
+      musicState = applyCommand(musicState, command);
+    }
+  }
+  const background = commands.find(isPreviewBackground);
+  const backgroundTime = seconds(background?.values.duration);
+  const removals = commands.filter(isPreviewRemoval);
+  const isMidpointRemoval = (command) => backgroundTime > 0 && !seconds(command.values.duration);
+  if (!background) effects.push(playMusic(state));
+  await run(removals.filter((command) => !isMidpointRemoval(command)));
+  if (token !== generation) return state;
+  if (backgroundTime) {
+    backgroundFade.value.color = background.values.color || "black";
+    await tween(backgroundTime / 2, token, (t) => {
+      backgroundFade.value.opacity = t;
+    }, { spatial: false });
+    if (token !== generation) return state;
+    effects.push(playMusic(state));
+    await run(removals.filter(isMidpointRemoval));
+  }
+
+  const characters = commands.filter((command) =>
+    command.canonical.startsWith("char:") && !isPreviewRemoval(command) && !isCharacterEffect(command),
+  );
+  const newIds = new Set(characters
+    .filter((command) => command.canonical === "char:show" && !visible(command.values.id.toLowerCase()))
+    .map((command) => command.values.id.toLowerCase()));
+  const isNewCharacter = (command) => newIds.has(command.values.id.toLowerCase());
+  await run(characters.filter((command) => !isNewCharacter(command)));
+  if (token !== generation) return state;
+  if (background) {
+    if (!backgroundTime) effects.push(playMusic(state));
+    await run([background]);
+    if (backgroundTime)
+      await tween(backgroundTime / 2, token, (t) => {
+        backgroundFade.value.opacity = 1 - t;
+      }, { spatial: false });
+  }
+  await run(characters.filter(isNewCharacter));
+  await run(commands.filter((command) =>
+    command.canonical.startsWith("fade:") || command.canonical.startsWith("dialogue:"),
+  ));
+  await Promise.all(effects);
+  return music.reduce(applyCommand, state);
+}
+async function playCommand(c, state, token) {
+  const next = applyCommand(state, c),
+    v = c.values,
+    moved = ["char:move", "char:show"].includes(c.canonical)
+      && state.characters.some((ch) =>
+        ch.id.toLowerCase() === v.id.toLowerCase() && ch.x !== Number(v.x),
+      ),
+    d = c.canonical === "char:move" ? (moved ? 0.25 : 0) : seconds(v.duration);
+  if (c.canonical === "char:face" && d) {
+    const old = state.characters.find(
+      (x) => x.id.toLowerCase() === v.id.toLowerCase(),
+    );
+    if (old) {
+      await tween(d / 2, token, (p) => {
+        const s = clone(state);
+        s.characters.find(
+          (x) => x.id.toLowerCase() === v.id.toLowerCase(),
+        ).opacity = 1 - p;
+        display.value = s;
+      }, { spatial: false });
+      await tween(d / 2, token, (p) => {
+        const s = clone(next);
+        s.characters.find(
+          (x) => x.id.toLowerCase() === v.id.toLowerCase(),
+        ).opacity = p;
+        display.value = s;
+      }, { spatial: false });
+    }
+  } else if ((d || moved) && c.canonical.startsWith("char:")) {
+    const totalTime = Math.max(d, moved ? 0.25 : 0);
+    await tween(totalTime, token, (p) => {
+      const s = clone(next);
+      const moveProgress = Math.min(1, (p * totalTime) / 0.25);
+      const easedMove = moveProgress * moveProgress * (3 - 2 * moveProgress);
+      for (const ch of s.characters) {
+        const old = state.characters.find(
+          (x) => x.id.toLowerCase() === ch.id.toLowerCase(),
+        );
+        if (old) {
+          ch.x = lerp(old.x, ch.x, moved ? easedMove : p);
+          ch.scale = lerp(old.scale, ch.scale, p);
+          if (c.canonical === "char:tint") {
+            const a = rgba(old.tint),
+              b = rgba(ch.tint);
+            ch.tint =
+              "#" +
+              a
+                .map((v, i) =>
+                  Math.round(lerp(v, b[i], p) * 255)
+                    .toString(16)
+                    .padStart(2, "0"),
+                )
+                .join("");
+          }
+        } else ch.opacity = p;
+      }
+      for (const old of state.characters.filter(
+        (x) =>
+          !s.characters.some(
+            (y) => y.id.toLowerCase() === x.id.toLowerCase(),
+          ),
+      ))
+        s.characters.push({ ...old, opacity: 1 - p });
+      display.value = s;
+    }, { spatial: moved || c.canonical === "char:scale" });
+  } else if (d && c.canonical.startsWith("fade:")) {
+    const startOpacity =
+      c.canonical === "fade:in" && state.fade.opacity <= 0.001
+        ? rgba(v.color)[3]
+        : state.fade.opacity;
+    await tween(d, token, (p) => {
+      display.value = {
+        ...clone(next),
+        fade: {
+          color: next.fade.color,
+          opacity: lerp(startOpacity, next.fade.opacity, p),
+        },
+      };
+    }, { spatial: false });
+  } else if (d && c.canonical.startsWith("dialogue:")) {
+    await tween(d, token, (p) => {
+      display.value = {
+        ...clone(next),
+        dialogue: true,
+        dialogueAlpha: lerp(state.dialogue ? 1 : 0, next.dialogue ? 1 : 0, p),
+      };
+    }, { spatial: false });
+  }
+  if (token === generation) {
+    display.value = clone(next);
+    draw();
+  }
+  return next;
 }
 let dragging = null;
 function pointerDown(event) {

@@ -618,14 +618,33 @@ fieldset {
   padding: 24px;
 }
 .transport {
-  @apply flex items-center justify-center gap-3;
-  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  row-gap: 8px;
   margin: 16px 0 23px;
   min-height: 38px;
 }
-.transport .button {
+.transport-navigation {
+  @apply flex items-center justify-center gap-3;
+  grid-column: 2;
+}
+.transport-navigation .button {
   min-width: 87px;
   background: transparent;
+}
+.preview-play-button {
+  grid-column: 3;
+  justify-self: end;
+  white-space: nowrap;
+}
+.compact-transport .preview-play-button {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  margin-inline-end: 30%;
+}
+.compact-transport:has(.preview-play-button) .transport-navigation {
+  grid-row: 2;
 }
 .dialogue-editor {
   border: 1px solid var(--line);
@@ -1667,6 +1686,9 @@ fieldset {
   }
   .transport {
     margin: 14px 0 19px;
+  }
+  .preview-play-button span {
+    display: none;
   }
   .dialogue-editor > textarea {
     font-size: 16px;
