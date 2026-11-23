@@ -1,5 +1,6 @@
 export const CHARACTER_POSITION_MIN = -0.5;
 export const CHARACTER_POSITION_MAX = 1.5;
+export const CHARACTER_SCALE_MIN = 0.01;
 export const SHOW_TINT_PREFIX = "tint=";
 
 const field = (key, label, type = "text", value = "", extra = {}) => ({
@@ -61,6 +62,11 @@ export const COMMANDS = [
         options: ["false", "true"],
       }),
       displayOrder(true),
+      field("initialScale", "初期サイズ（倍率）", "number", "", {
+        min: CHARACTER_SCALE_MIN,
+        step: "any",
+        optional: true,
+      }),
       field("initialTint", "初期色", "color", "", { optional: true }),
     ],
     ["char:add"],
@@ -127,7 +133,7 @@ export const COMMANDS = [
     "キャラクター",
     [
       id(),
-      field("scale", "倍率", "number", "1", { min: 0.01, step: 0.1 }),
+      field("scale", "倍率", "number", "1", { min: CHARACTER_SCALE_MIN, step: 0.1 }),
       duration(),
     ],
     ["char:size"],
@@ -249,8 +255,9 @@ export function parseCommands(raw = "") {
       if (isShow) {
         values.initialTint = hasInitialTint ? args.at(-1).slice(SHOW_TINT_PREFIX.length) : "";
         if (values.order.toLowerCase() === "keep") values.order = "";
-        // Preserve authored scale and legacy placement arguments when editing a show.
-        if (positional.length > 6) values.showSetup = positional.slice(6);
+        if (values.initialScale.toLowerCase() === "keep") values.initialScale = "";
+        // Preserve the legacy placement marker after the scale field.
+        if (positional.length > 7) values.showSetup = positional.slice(7);
       }
       return {
         raw,
@@ -310,10 +317,12 @@ export function buildCommand(key, values = {}) {
   );
   const isShow = definition.key === "char:show";
   const initialTint = isShow ? args.pop() : "";
+  // Initial scale follows the display order slot in Unity.
+  if (isShow && args[6] && !args[5]) args[5] = "keep";
   while (args.length && definition.fields[args.length - 1].optional && !args.at(-1))
     args.pop();
   if (isShow && values.showSetup?.length) {
-    if (args.length === 5) args.push("keep");
+    while (args.length < 7) args.push("keep");
     args.push(...values.showSetup);
   }
   if (initialTint) args.push(SHOW_TINT_PREFIX + initialTint);
@@ -430,7 +439,7 @@ export function applyCommand(state, command) {
     const character = setCharacterAsset({
       id: v.id,
       x: Number(v.x),
-      scale: previous?.scale ?? 1,
+      scale: v.initialScale ? Number(v.initialScale) : previous?.scale ?? 1,
       flip: ["true", "left", "flip", "flipped"].includes(v.flip),
       tint: v.initialTint || previous?.tint || "white",
       order: v.order === "" ? (previous?.order ?? 0) : Number(v.order),

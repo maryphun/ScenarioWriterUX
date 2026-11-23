@@ -46,6 +46,7 @@ import {
   COMMANDS,
   CHARACTER_POSITION_MIN,
   CHARACTER_POSITION_MAX,
+  CHARACTER_SCALE_MIN,
   parseCommands,
   buildCommand,
   commandLabel,
@@ -264,6 +265,7 @@ const defaultCharacterForm = () => ({
   ...DEFAULT_CHARACTER_TRANSITION,
   flip: "false",
   order: "",
+  initialScale: "",
   initialTint: "",
 });
 const characterForm = ref(defaultCharacterForm());
@@ -2055,6 +2057,17 @@ onBeforeUnmount(() => {
                     step="1"
                     placeholder="自動"
                   /><small>0 が最前。1 は 0 の後ろです。</small></label
+                ><label>
+                  初期サイズ（倍率）
+                  <input
+                    v-model="characterForm.initialScale"
+                    type="number"
+                    :min="CHARACTER_SCALE_MIN"
+                    step="any"
+                    placeholder="1"
+                  />
+                  <small>空欄は 1（通常）です。</small>
+                </label
                 ><fieldset class="transition-fields character-transition">
                   <legend>表示の切り替え</legend>
                   <div class="segmented">

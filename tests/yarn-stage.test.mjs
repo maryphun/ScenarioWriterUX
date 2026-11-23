@@ -18,6 +18,16 @@ function groups(text) {
     .map((line) => JSON.parse(Buffer.from(JSON.parse(line.trim().slice("<<dialogue_stage ".length, -2)), "base64").toString("utf8")).commands);
 }
 
+test("Yarn preserves explicit show scale with a folded position and an initial tint", () => {
+  const tab = importTab({ id: 1, name: "Story", rows: [[
+    "Start", "", "", "Reveal", "", "",
+    "[char:show:hero:Sprite:0.5:0.5:false:keep:0.85:tint=black] [char:move:hero:0.75:instant] [bgm:play:Theme]",
+  ]] });
+  const yarn = exportYarn({ tabs: [tab], speakers: [] }, parseCommands);
+  assert.deepEqual(groups(yarn)[0][0].args,
+    ["show", "hero", "Sprite", "0.75", "0.5", "false", "keep", "0.85", "instant", "tint=black"]);
+});
+
 test("new appearances and retained moves form one runtime stage regardless of author order", () => {
   const text = '<<char "show" "新人" "Sprite" 0.5 0.5 false>>\n<<char "move" "残る人" 0.8 "instant">>\n<<char "hide" "去る人" 0.5>>\n残る人: 台詞 #line:stable';
   const prepared = prepareYarnStageText(text);

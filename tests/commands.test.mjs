@@ -68,6 +68,28 @@ test("initial show tint is optional and independent of display order and legacy 
   assert.equal(stateAt(rows, 2).characters[0].tint, "white");
   assert.throws(() => buildCommand("char:show", { id: "actor", asset: "Sprite", initialTint: "invalid" }), /色名/);
 });
+test("show sets the initial scale and keeps order, tint and legacy setup independent", () => {
+  const raw = buildCommand("char:show", {
+    id: "actor", asset: "Sprite", initialScale: 1.32, initialTint: "black",
+  });
+  assert.equal(raw, "[char:show:actor:Sprite:0.5:instant:false:keep:1.32:tint=black]");
+  const rows = [
+    { command: raw },
+    { command: "[char:show:actor:NextSprite]" },
+    { command: "[char:add:actor:NextSprite:0.5:instant:false:2:0.8:instant]" },
+  ];
+  assert.equal(stateAt(rows, 0).characters[0].scale, 1.32);
+  assert.equal(stateAt(rows, 1).characters[0].scale, 1.32);
+  const legacy = parseCommands(rows[2].command)[0];
+  assert.equal(legacy.values.initialScale, "0.8");
+  assert.equal(stateAt(rows, 2).characters[0].scale, 0.8);
+  assert.equal(buildCommand(legacy.key, legacy.values), rows[2].command);
+  assert.equal(buildCommand(legacy.key, { ...legacy.values, initialScale: "" }),
+    "[char:add:actor:NextSprite:0.5:instant:false:2:keep:instant]");
+  assert.throws(() => buildCommand("char:show", {
+    id: "actor", asset: "Sprite", initialScale: 0,
+  }), /初期サイズ/);
+});
 test("character display order is optional on show and can be changed later", () => {
   assert.equal(
     buildCommand("char:show", {

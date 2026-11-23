@@ -75,6 +75,11 @@ test("Vue editor and existing command forms render with their saved values", asy
     assert.match(suggestedForm, /value="ピュアプリピーチ"/);
     assert.match(suggestedForm, /value="宮森楓"/);
     assert.match(suggestedForm, /表示順（0 が最前）/);
+    const initialSizeForm = await renderToString(createSSRApp(CommandEditor, {
+      initial: "[char:show:hero:Sprite:0.5:0.5:false:keep:1.32]",
+    }));
+    assert.match(initialSizeForm, /初期サイズ（倍率）/);
+    assert.match(initialSizeForm, /<input(?=[^>]*type="number")(?=[^>]*step="any")[^>]*value="1\.32"/);
     const flashForm = await renderToString(createSSRApp(CommandEditor, { initial: "[char:flash:白崎桃香:#ff2040]" }));
     assert.match(flashForm, /type="color"/);
     assert.match(flashForm, /value="#ff2040"/);

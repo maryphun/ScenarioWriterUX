@@ -507,7 +507,7 @@ async function playCommand(c, state, token) {
         );
         if (old) {
           ch.x = lerp(old.x, ch.x, moved ? easedMove : p);
-          ch.scale = lerp(old.scale, ch.scale, p);
+          if (c.canonical === "char:scale") ch.scale = lerp(old.scale, ch.scale, p);
           if (c.canonical === "char:tint") {
             const a = rgba(old.tint),
               b = rgba(ch.tint);

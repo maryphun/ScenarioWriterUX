@@ -173,6 +173,8 @@ const expressionSprites = computed(() =>
           >−0.5〜1.5：0.5が中央。0未満でさらに左、1超でさらに右へ。</small
         ><small v-else-if="f.key === 'order'"
           >0 が最前。数字が大きいほど後ろです。表示時は空欄なら従来の表示順を使います。</small
+        ><small v-else-if="f.key === 'initialScale'"
+          >1 が通常。空欄なら現在のサイズを引き継ぎます。</small
         ></label
       >
       <label v-else
